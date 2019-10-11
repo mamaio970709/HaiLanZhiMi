@@ -1,0 +1,12 @@
+(function($, lazySizesConfig) {
+  // Options can be set by declaring a global configuration option object named lazySizesConfig.
+  // This object must be defined before the lazysizes script.
+
+  // console.log('lazysizes-config loaded');
+  // LazySizes initializes itself as soon as possible.
+  // In case you set lazySizesConfig.init to false you need to explicitly call lazySizes.init().
+  // lazySizesConfig.init = false;
+  // Default 360 - Acceptable vales between 100 - 1000 (Small images, use small number.)
+  lazySizesConfig.expand = 160;
+
+})(jQuery, window.lazySizesConfig = window.lazySizesConfig || {});

@@ -1,0 +1,220 @@
+/**
+ * Generic grid functionality (equal heights).
+ *
+ * Usage:
+ *
+ * To let this behavior automatically equalize the heights of the elements in
+ * your grid:
+ *
+ *     <ul class="js-grid" data-grid-items-per-row="3">
+ *       <li class="js-grid-item">Item 1</li>
+ *       <li class="js-grid-item">Item 2</li>
+ *       <li class="js-grid-item">Item 3</li>
+ *       <li class="js-grid-item">Item 4</li>
+ *       <li class="js-grid-item">Item 5</li>
+ *     </ul>
+ *
+ * To allow the behavior to not only equalize the height of each item, but also
+ * the heights of different sub-elements in each row:
+ *
+ *     <ul class="js-grid" data-grid-items-per-row="3" data-grid-sub-items=".equalize-this-per-row, .also-equalize-this">
+ *       <li class="js-grid-item">
+ *         <p class="equalize-this-per-row">
+ *           This will be equalized with the other elements in the same row
+ *           that have the class "equalize-this-per-row" because I put it in the
+ *           data-grid-sub-items in the wrapper.
+ *         </p>
+ *         <p class="not-equal">This won't be equalized.</p>
+ *         <p class="also-equalize-this">
+ *           Equalized with .also-equalize-this elements in the same row.
+ *         </p>
+ *       </li>
+ *       <li class="js-grid-item">
+ *         <p class="equalize-this-per-row">
+ *           ...etc.
+ *
+ * To set the column count to change at different Unison breakpoints:
+ *
+ *     <ul class="js-grid" data-grid-items-per-row='{ "small": 1, "medium": 3 }' data-grid-sub-items=".equalize-this-per-row, .also-equalize-this">
+ *       <li class="js-grid-item">
+ *         ...
+ *
+ * If you want to just use the js methods directly in your script:
+ *
+ * Equalize the heights of an arbitrary set of elements:
+ *
+ *     Drupal.behaviors.grids.equalHeights($elements);
+ *
+ * Equalize the heights of a set of elements consisting of multiple rows:
+ *
+ *     Drupal.behaviors.grids.equalHeightsRows($items, colCount);
+ */
+
+Drupal.behaviors.grids = (function($) {
+  var $grids = $();
+  var bps = {};
+  var ww = $(window).width();
+
+  var grids = {
+    attach: function(context) {
+      var $newGrids = $('.js-grid', context).andSelf('.js-grid');
+      this.register($newGrids);
+      this.equalHeightsGrids($newGrids);
+      // add first and last classes
+      $('.js-grid-item', $newGrids).first().addClass('first');
+      $('.js-grid-item', $newGrids).last().addClass('last');
+    },
+
+    register: function($newGrids) {
+      $grids = $grids.add($newGrids);
+    },
+
+    getColCountData: function($grid) {
+      var colCountData = $grid.data('grid-items-per-row');
+      var colCount;
+
+      if (!colCountData) {
+        return false;
+      }
+
+      if (_.isEmpty(bps)) {
+        bps = Unison.fetch.all();
+      }
+
+      // If you pass an object, assume it's column counts keyed by Unison
+      // breakpoints:
+      if (_.isObject(colCountData)) {
+
+        // Find the closest breakpoint, get the key, then get the
+        // corresponding column count:
+        var bpv = _.max(_.pick(bps, _.keys(colCountData)), function(bp) {
+          var bpn = parseInt(bp, 10);
+          return bpn > ww ? 0 : bpn;
+        });
+
+        var bpk = _.findKey(bps, function(x) {
+          return x === bpv;
+        });
+
+        colCount = parseInt(colCountData[bpk], 10);
+      } else {
+        colCount = parseInt(colCountData, 10);
+      }
+
+      if (_.isNaN(colCountData)) {
+        throw new Error('Unable to convert col-count-data in grid to object or number. If using an object in the data be sure to use valid JSON syntax (ie. with Quotes around the keys).');
+      }
+
+      return colCount;
+    },
+
+    // Trigger equal heights on all grids, or optionally, a specific grid. This
+    // attempts to pull configuration values from the grid's data attributes
+    // to determine the items per row and sub elements that need equal heights.
+    equalHeightsGrids: function($g) {
+      var self = this;
+
+      $g = _.isUndefined($g) ? $grids : $g;
+      ww = $(window).width();
+      if (_.isEmpty(bps)) {
+        bps = Unison.fetch.all();
+      }
+
+      $g.each(function(){
+        // Get the first level of grid items (not grid items inside of grid items)
+        var $items = $('.js-grid-item', this).first().parent().children('.js-grid-item');
+        var subElementsSelector = $(this).data('grid-sub-items');
+        var colCount = self.getColCountData($(this)) || $items.length || 1;
+
+        self.equalHeightsRows($items, colCount, subElementsSelector);
+      });
+    },
+
+    // Trigger equal heights on a set of items, grouped by colCount, and
+    // optionally on subElementsSelector within each item in the row.
+    equalHeightsRows: function($items, colCount, subElementsSelector) {
+      var self = this;
+      var $visibleItems = $items.filter(':visible');
+      var $row = $();
+      var subElementsArray = [];
+      var i = 0;
+      var j = 0;
+
+      // Reset the grid:
+      $visibleItems.css('height', '').removeClass('grid__item--last-col');
+      if (_.isString(subElementsSelector)) {
+        subElementsArray = _.map(subElementsSelector.split(','), _.trim);
+        // Reset all the sub-element heights before continuing:
+        $(subElementsSelector, $items).css('height', '');
+      }
+
+      // Do nothing else if there's only 1 item per row
+      if (colCount === 1) {
+        return;
+      }
+
+      $visibleItems.each(function(k){
+        // On mobile we have a two column layout and all colspans should be 100% full width. Therefore we need to make elements with data-colspan=1 behave as if it was set to span 2.
+        var span = ($(this).data('colspan') === 1 && Unison.fetch.now().name === 'small' ? 2 : $(this).data('colspan'));
+        var colspan = span || 1;
+        i += colspan;
+        j += colspan;
+        $row = $row.add(this);
+        if ($row.length === 1) {
+          $row.addClass('grid__item--left');
+        }
+        if (j % colCount === 0 || k + 1 === $visibleItems.length) {
+          $row.last().addClass('grid__item--last-col');
+          // Equalize the subelements before the containers:
+          if (subElementsArray.length) {
+            for (var l = 0, len = subElementsArray.length; l < len; l++) {
+              self.equalHeights($(subElementsArray[l], $row));
+            }
+          }
+          self.equalHeights($row);
+          i = 0;
+          $row = $();
+        }
+      });
+    },
+
+    // The actual equal heights function that gets called on an arbitrary set of
+    // elements. Temporarily resets heights to the default, finds the largest
+    // height in $els and sets the height of each element to that.
+    equalHeights: function($els) {
+      if (!$els.length) {
+        return;
+      }
+      $els.css('height', '');
+
+      // If there's only 1 element, there's no reason to set the height.
+      if ($els.length === 1) {
+        return;
+      }
+      var $tallest = $(_.max($els, function(el) {
+        return $(el).outerHeight(false);
+      }));
+      if ($tallest.length) {
+        $els.css('height', $tallest.outerHeight(false));
+      }
+    }
+  };
+
+  window.site = window.site || {};
+  var site = window.site;
+  site.util = site.util || {};
+  site.util.grids = grids;
+
+  // Equalize the grid item heights when the window finishes loading and after
+  // every (throttled) resize.
+  $(window).on('load.grids resize-throttled.grids focus.grids', function() {
+    grids.equalHeightsGrids();
+  });
+
+  $(document).on('grid.reflow', '.js-grid', function() {
+    grids.equalHeightsGrids($(this));
+  });
+
+  return grids;
+
+})(jQuery);

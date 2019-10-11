@@ -1,0 +1,362 @@
+/*global prodcat*/
+(function(site, $) {
+  var formCaptureObj = {}, linkCaptureObj = {};
+  var drupalAltImgSettings = Drupal.settings.analytics ? Drupal.settings.analytics.alt_image_tagging_enabled : false;
+  // Flag to avoid bubbling on alt image click
+  var altImageClickCheck = false;
+
+  Drupal.behaviors.analyticsBehavior = {
+
+    attached: 0,
+
+    findElementIndex: function(arr, value) {
+      return _.findIndex(arr, function(elem) {
+        return elem === value;
+      });
+    },
+
+    linkToPage: function() {
+      window.open(linkCaptureObj.href, linkCaptureObj.target);
+    },
+
+    setLinkCapture: function(href, target) {
+      linkCaptureObj.href = href;
+      linkCaptureObj.target = target;
+    },
+
+    submitForm: function() {
+      formCaptureObj.form.off('submit');
+      formCaptureObj.form.trigger('submit');
+    },
+
+    stripOutMarkup: function(str) {
+      return str.replace(/(<([^>]+)>)/ig, '');
+    },
+
+    // Accepts an array of PRODUCT_IDS, returns an array of positions
+    getProductPositions: function(productIds) {
+      var positions = [], i;
+      if (window.hasOwnProperty('prodcat') && prodcat.hasOwnProperty('data') && prodcat.data.hasOwnProperty('pids')) {
+        for (i = 0; i < productIds.length; i++) {
+          positions.push(this.findElementIndex(prodcat.data.pids, productIds[i]));
+        }
+      }
+      return positions;
+    },
+
+    // Examples of brand specific overrides for event handling
+
+    addToCart: function(eventData) {
+      site.track.addToCart(Object.assign({}, eventData));
+    },
+
+    addToFavorites: function(eventData) {
+      site.track.addToFavorites(Object.assign({}, eventData));
+    },
+
+    removeFromCart: function(eventData) {
+      site.track.removeFromCart(Object.assign({}, eventData));
+    },
+
+    // End examples brand specific overrides for event handling
+
+    attach: function(context) {
+      // all code here
+      var self = this;
+      var analyticSettings = Drupal.settings.analytics ? Drupal.settings.analytics.analytics_tagging_enabled : false;
+      if (self.attached) {
+        return;
+      }
+
+      // Track Brand Logo
+      $('.js-site-header__utility-item__link-logo', context).on('click', function(event) {
+        var obj;
+        event.preventDefault();
+        self.setLinkCapture($(this).attr('href'), '_self');
+        obj = {
+          event_name: 'logo_click',
+          event_category: 'global',
+          event_action: 'logo clicked'
+        };
+        site.track.evtLink(obj, self.linkToPage);
+      });
+
+      /* Track Gloabl Navigation Elements - Commenting this code as this breaks the nav functionality in mobile
+      $('.site-header__menu a.js-nav-link-trigger', context).on('click', function() {
+        var obj;
+        self.setLinkCapture($(this).attr('href'), '_self');
+        obj = {
+          event_name: 'navigation_click',
+          event_category: 'global',
+          event_action: 'nav clicked',
+          event_label: $(this).text().trim()
+        };
+        site.track.evtLink(obj);
+      }); */
+
+      // Track Navigation Click
+      $('.js-nav-link-trigger', context).on('click', function() {
+        var navElemLast = $(this).children().text().trim();
+        var navTrackName = $(this).closest('.node').attr('trackname').split('|', 1);
+        var promoTrackName = navTrackName[0].split(' ');
+        var promoName = promoTrackName.splice(1).join('>') + '>' + navElemLast;
+
+        if (typeof promoName !== 'undefined' && promoName !== '') {
+          site.track.navigationClick({
+            promo_name: [promoName]
+          });
+        }
+      });
+
+      // Track Product Click
+      $('.js-product-brief a', context).on('click', function() {
+        var prodElem = $(this).parents('.js-product');
+        var prodId = prodElem.attr('data-product-id');
+
+        if (typeof prodId !== 'undefined' && prodId !== '') {
+          site.track.productClick({
+            product_id: [prodId]
+          });
+        }
+      });
+
+      // Track Quick Shop
+      $('.js-quickshop-launch-inline, .js-quickshop-launch-overlay', context).on('click', function() {
+        var catName, prodElem, obj, prodId, prodName;
+        catName = $('.content > article', context).attr('trackname');
+        prodElem = $(this).closest('.js-product-brief');
+        prodId = $(this).attr('data-product-id');
+        prodName = $.trim(self.stripOutMarkup(prodElem.find('.product-brief__info').find('.product-name a').html()));
+        obj = {
+          event_label: prodName + ' - ' + $(this).attr('data-product-id'),
+          page_name: 'QV | ' + prodName,
+          product_id: [prodId],
+          product_catagory_name: [catName],
+          product_price: [prodElem.find('.js-product-price').text().replace(/\s+/g, ' ').trim()]
+        };
+        site.track.quickView(obj);
+      });
+
+      // Track Predictive Search Product Click and All Results Click
+      $(window).on('OMNISEARCH', function() {
+        var prods, term;
+        prods = $('.js-typeahead-wrapper a');
+        term = $('.js-end-esearch-nav__form input#search').val();
+        prods.on('click', function() {
+          var obj;
+          event.preventDefault();
+          self.setLinkCapture($(this).attr('href'), '_self');
+          obj = {
+            event_label: term,
+            search_keyword: term,
+            product_sku: 'SKU' + $(this).closest('.product-brief').attr('data-sku-base-id'),
+            product_id: $(this).closest('.js-product').attr('data-product-id'),
+            product_name: self.stripOutMarkup($(this).closest('.js-product').find('h3 a').text())
+          };
+          site.track.evtAction('searchOneResultSelected', obj, self.linkToPage);
+        });
+      });
+
+      // Track MPP Filters
+      $(document).on('click', '.js-mpp-filter-set__button', function() {
+        var obj, content_name;
+        content_name = $(this).text().trim();
+        var parentText = $(this).parent().siblings().text();
+        obj = {
+          event_category: 'filter & sort selection',
+          event_label: content_name,
+          event_action: 'filter' + '-' + parentText
+        };
+        site.track.evtAction('filterProducts', obj);
+      });
+
+      // Track Sort By
+      $(document).on('change', '.js-mpp-sort-menu', function() {
+        var obj, content_name;
+        content_name = $('option:selected', this).text();
+        obj = {
+          event_category: 'filter & sort selection',
+          event_action: 'sortby',
+          event_label: content_name
+        };
+        site.track.evtLink(obj);
+      });
+
+      // Track Social Icon Links
+      $('.social-media-links a', context).on('click', function() {
+        var href = $(this).attr('href');
+        var obj = {
+          event_action: href,
+          event_label: window.location.href
+        };
+        site.track.evtAction('socialLink', obj);
+      });
+
+      // CHECKOUT EVENTS
+      // Track guest user checkout
+      $(document).on('click', '#checkout_signin_guest_user-submit, #checkout_signin_new_user-submit', function() {
+        var obj = {};
+        site.track.evtAction('checkoutGuestUser', obj);
+      });
+
+      // Track return user checkout
+      $(document).on('click', '#checkout_signin-submit', function() {
+        var obj = {};
+        site.track.evtAction('checkoutReturnUser', obj);
+      });
+
+      // Track Payment Method
+      $('#checkout_billing input.form-submit, #js-analytics-continue-checkout').on('click', function() {
+        var payment_label = '';
+        var payment_type = $('input[name=PAYMENT_TYPE]:checked').val() || $('input[name=PAYMENT_TYPE]').val() || $('input[name=PAYMENT_OPTION]:checked').val();
+        if (payment_type === 'PP' || payment_type === 'PAYMENT_OPTION_PAYPAL') {
+          payment_label = 'paypal';
+        } else if (payment_type === 'CC' || payment_type === 'PAYMENT_OPTION_CC') {
+          payment_label = 'creditcard';
+        } else if (payment_type === 'COD') {
+          payment_label = 'COD';
+        } else if (payment_type === 'BT') {
+          payment_label = 'By Bank';
+        } else if (payment_type === 'KBank') {
+          payment_label = 'KBank';
+        } else if (payment_type === 'PAYMENT_OPTION_SOFORT') {
+          payment_label = 'Sofort Bank';
+        }
+
+        var obj = {
+          event_label: payment_label
+        };
+        site.track.evtAction('checkoutPaymentSelected', obj);
+      });
+
+      // Track Paypal Express Check-out
+      $('a.paypal-checkout').on('click', function() {
+        var obj = {
+          event_label: 'paypal'
+        };
+        site.track.evtAction('checkoutPaymentSelected', obj);
+      });
+
+      // END CHECKOUT EVENTS
+
+      // Expand/Collapse SPP Modules
+      $('.js-accordion__title').on('click', function() {
+        var obj;
+        var accordinname = '';
+        var targetclass = '';
+        var accordinstatus = '';
+        accordinname = $(this).text().replace(':', '').trim();
+        targetclass = $(this).attr('class');
+        accordinstatus = targetclass.match(/active/gi) ? 'Collapse' : 'Expand';
+        if (accordinstatus !== '') {
+          obj = {
+            event_category: 'SPP Modules',
+            event_action: accordinstatus,
+            event_label: accordinname
+          };
+        }
+
+        site.track.evtLink(obj);
+      });
+
+      // Voice Search
+      if ($('div').hasClass('voice-search') && analyticSettings) {
+        $('.js-voice-search', context).once('js-voice').each(function() {
+          $(this).on('click', function() {
+            var voiceSearch = {
+              event_name: 'voice_search',
+              event_action: 'search mic click',
+              event_label: 'voice search',
+              event_category: 'onsite search'
+            };
+            site.track.evtLink(voiceSearch);
+          });
+        });
+      }
+
+      // Alt image tracking start
+      if ($('body').hasClass('section-product') && drupalAltImgSettings) {
+        // Trigger Alt image event only when alternate images are available
+        if ($('body').hasClass('device-pc') && $('.js-spp-carousel__thumbnail').length > 1) {
+          trackAltImageTrackingClickPC();
+          trackAltImageTrackingDragPC();
+        } else if ($('body').hasClass('device-mobile')) {
+          trackAltImageTrackingMobile();
+        }
+      }
+
+      // Track Alt image click - desktop
+      function trackAltImageTrackingClickPC() {
+        $(document).on('click', '.js-spp-carousel__thumbnail', function() {
+          altImageClickCheck = true;
+          var $targetElem = $(this);
+          var altImageName = '';
+          var prodDetails = buildAltImageProductName($targetElem);
+          var bgImageUrl = $targetElem.find('.js-product-image').attr('src');
+          if (bgImageUrl) {
+            altImageName = buildAltImageFileName(bgImageUrl);
+          }
+          trackThumbnailClickEvent(altImageName, prodDetails[0], prodDetails[1], 'click');
+        });
+      }
+
+      // Track Alt image drag - desktop
+      function trackAltImageTrackingDragPC() {
+        $(document).on('afterChange', '.js-spp-carousel', function() {
+          if (!altImageClickCheck) {
+            var $targetElem = $(this);
+            var altImageName = '';
+            var prodDetails = buildAltImageProductName($targetElem);
+            var bgImageUrl = $targetElem.find('.slick-current img').attr('src');
+            if (bgImageUrl) {
+              altImageName = buildAltImageFileName(bgImageUrl);
+            }
+            trackThumbnailClickEvent(altImageName, prodDetails[0], prodDetails[1], 'drag');
+          }
+          altImageClickCheck = false;
+        });
+      }
+
+      // Track Alt image swipe - Mobile
+      function trackAltImageTrackingMobile() {
+        $(document).on('afterChange', '.js-spp-carousel', function() {
+          var $targetElem = $(this);
+          var altImageName = '';
+          var prodDetails = buildAltImageProductName($targetElem);
+          var bgImageUrl = $targetElem.find('.slick-current img').attr('src');
+          if (bgImageUrl) {
+            altImageName = buildAltImageFileName(bgImageUrl);
+          }
+          trackThumbnailClickEvent(altImageName, prodDetails[0], prodDetails[1], 'swipe');
+        });
+      }
+
+      // Build Alt image product name
+      function buildAltImageProductName(targetElem) {
+        var prodElem = targetElem.closest('.js-product');
+        var prodId = prodElem.attr('data-product-id');
+        var prodName = prodElem.find('.product-full__container .product-full__name').text();
+        return [prodName, prodId];
+      }
+
+      // Build Alt image file name
+      function buildAltImageFileName(altImageUrl) {
+        var altImageArray = altImageUrl.split('/');
+        var altImageName = altImageArray[altImageArray.length - 1].split('.')[0];
+        return altImageName;
+      }
+
+      // Track product thumbnail click event
+      function trackThumbnailClickEvent(altImageName, prodName, prodId, eventType) {
+        var obj = {
+          'event_action': 'alt image - ' + altImageName + ' - ' + eventType,
+          'event_label': prodName + ' - ' + prodId
+        };
+        site.track.productThumbnailClick(obj);
+      }
+      // Alt image tracking end
+
+      self.attached = 1;
+    }
+  };
+}(window.site || {}, jQuery));

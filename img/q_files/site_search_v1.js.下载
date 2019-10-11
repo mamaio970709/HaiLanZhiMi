@@ -1,0 +1,72 @@
+(function($){
+
+Drupal.behaviors.siteSearch = {
+  open: function() {
+    this.$content.addClass(this.activeClass);
+    this.$searchForm.css('height', window.innerHeight).addClass(this.activeClass);
+    this.$closeBtns.addClass(this.activeClass);
+    this.isActive = false;
+    this.$micSearchIcon.addClass('hidden');
+  },
+  close: function() {
+    this.$content.removeClass(this.activeClass);
+    this.$searchForm.css('height', 0).removeClass(this.activeClass);
+    this.$closeBtns.removeClass(this.activeClass)
+    this.$termInput.val('');
+    this.isActive = true;
+    this.$micSearchIcon.removeClass('hidden');
+  },
+  initEvents: function() {
+    var that = this;
+
+    $(document).on('search:open', $.proxy(function() {
+      that.$termInput.focus();
+    }, this));
+
+    $(document).on('search:close', $.proxy(that.close, this));
+
+    $(document).on('search:toggle', $.proxy(function() {
+      if (that.isActive) {
+        $(document).trigger('search:open');
+      } else {
+        $(document).trigger('search:close');
+      }
+    }, this));
+  },
+  attach: function(context) {
+    var that = this;
+    if (that.isAttached) {
+      return null;
+    }
+    that.isActive = true;
+    that.isAttached = true;
+    that.$content = $('.js-end-esearch-nav');
+    that.$closeBtns = $('.js-site-search-close');
+    that.$searchForm = $('.js-end-esearch-animation');
+    that.$termInput = $('.js-predictive-search-term');
+    that.$navMenu = $('.js-nav-menu');
+    that.activeClass = 'active';
+    that.$micSearchIcon = $('.js-voice-search'); // Mic Search Icon from La Mer Voice Search module
+
+    that.$closeBtns.on('click', function(e) {
+      e.preventDefault();
+      that.close();
+    });
+
+    that.$termInput.on('focus', function(e) {
+      that.open();
+    });
+
+    $(window).on('scroll', _.throttle(function(){
+      if ($(window).scrollTop() < that.$navMenu.height()) {
+        that.$content.css('top', 'inherit')
+      } else {
+        that.$content.css('top', that.$navMenu.height())
+      }
+    }, 100));
+
+    that.initEvents();
+  }
+};
+
+})(jQuery);

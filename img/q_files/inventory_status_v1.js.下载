@@ -1,0 +1,214 @@
+var prodcat = prodcat || {};
+prodcat.ui = prodcat.ui || {};
+prodcat.data = prodcat.data || {};
+var site = site || {};
+
+(function($) {
+  $(document).on('inv_status_data:updated', '.js-product', function() {
+    var $statusList = $('.js-inv-status-list', $(this));
+    var skuBaseId = $statusList.data('sku-base-id');
+    var skuData = prodcat.data.getSku(skuBaseId);
+    if (!!skuData) {
+      Drupal.behaviors.inventoryStatusV1.update($statusList, skuData);
+    }
+  });
+
+  $(document).on('product.updateInvStatusFinished', function() {
+    // check if defualt sku is OOS
+    var $products = $('.js-product');
+    $products.each(function(index) {
+      var $product = $(this);
+      var $skuList = $('.js-sku-list--v1', $product);
+      var $shadePicker = $('.js-product-shade-picker', $product);
+      if ($skuList.length || $shadePicker.length) {
+        var defaultSku = $product.data('sku-base-id');
+        var skuData = prodcat.data.getSku(defaultSku);
+        var inventory = skuData.INVENTORY_STATUS;
+        if (inventory === 1 || inventory === 2) {
+          $product.trigger('product.skuSelect', defaultSku);
+        } else {
+          var nextItemSku;
+          var $listItems = $('.js-sku-list__button', $product);
+          var $shadeItems = $('.js-product-shade', $product);
+          if ($listItems.length) {
+            nextItemSku = prodcat.ui.checkInventory($listItems, defaultSku);
+            $product.trigger('product.skuSelect', nextItemSku);
+          } else if ($shadeItems.length) {
+            nextItemSku = prodcat.ui.checkInventory($shadeItems, defaultSku);
+            $product.trigger('product.skuSelect', nextItemSku);
+          }
+        }
+      }
+    });
+  });
+
+  prodcat.ui.checkInventory = function($items, defaultSku) {
+    var nextInStock;
+    var $activeButton = $items.filter('[data-sku-base-id="' + defaultSku + '"]');
+    //start at out of stock item and work through list
+    var start = $items.index($activeButton);
+    for (var i = 0; i < $items.length; i++) {
+      var $item = $items.eq((start + i) % $items.length);
+      var skuBaseId = $item.data('skuBaseId');
+      var inventoryStatus = prodcat.data.getSku(skuBaseId).INVENTORY_STATUS;
+      if (inventoryStatus === 1 || inventoryStatus === 2) {
+        nextInStock = skuBaseId;
+        break;
+      }
+    }
+    return nextInStock;
+  };
+
+  $(document).on('product.skuSelect', '.js-product', function(e, skuBaseId) {
+    var $statusList = $('.js-inv-status-list', $(this));
+    if ($statusList.length < 1) return null;
+    Drupal.behaviors.inventoryStatusV1.selectSku($statusList, skuBaseId);
+  });
+
+  $(document).on('product.init', '.js-product', function() {
+    var $statusList = $('.js-inv-status-list', $(this));
+    var skuBaseId = $statusList.data('sku-base-id');
+    var skuData = prodcat.data.getSku(skuBaseId);
+    if (!!skuData) {
+      Drupal.behaviors.inventoryStatusV1.update($statusList, skuData);
+    }
+    if (Drupal.settings.common.enable_preorder) {
+      var prodId = $(this).data('product-id');
+      var prodData = prodcat.data.getProduct(prodId);
+      var preCount = 0;
+      var skus = prodData && prodData.skus ? prodData.skus : null;
+      if (!!skus) {
+        var preMppButton = $('.js-quickshop-launch-inline[data-product-id="' + prodData.PRODUCT_ID + '"], .js-quickshop-launch-overlay[data-product-id="' + prodData.PRODUCT_ID + '"]');
+        $.each(skus, function(index, sku) {
+          if (sku.isPreOrder) {
+            preCount += 1;
+          }
+        });
+        if (preCount === skus.length) {
+          preMppButton.text(site.translations.product.pre_order_text);
+        }
+      }
+    }
+  });
+
+  Drupal.behaviors.inventoryStatusV1 = {
+    update: function($statusList, skuData) {
+      if (!skuData || !skuData.INVENTORY_STATUS) {
+        return null;
+      }
+
+      var skuBaseId = $statusList.data('sku-base-id');
+      if (skuData.SKU_ID !== 'SKU' + skuBaseId) {
+        return null;
+      }
+
+      $('li', $statusList).addClass('hidden');
+
+      var $statusToShow = $('.js-inv-status-' + skuData.INVENTORY_STATUS, $statusList);
+      var skuInvStatus = skuData.INVENTORY_STATUS;
+      var commonSettings = Drupal.settings.common;
+      if ($statusToShow.length > 0) {
+        if (commonSettings && ((commonSettings.enable_cs_status && skuInvStatus === 3) ||
+           (commonSettings.enable_toos_status && skuInvStatus === 2) ||
+           (commonSettings.enable_sold_out_status && skuInvStatus === 7))) {
+          $statusToShow.removeClass('hidden');
+        }
+        $statusList.trigger('inv_status_display:updated');
+      }
+
+      if (!!skuData.isLimitedRemaining) {
+        $('.js-inv-status-limited', $statusList).removeClass('hidden');
+      }
+
+      if (Drupal.settings.common.enable_preorder) {
+        Drupal.behaviors.inventoryStatusV1.isPreorder(skuData);
+      }
+    },
+    isPreorder: function(skuData) {
+      var $prodId = skuData.PRODUCT_ID;
+      //var $skuBaseId = skuData.SKU_BASE_ID;
+      var $addToBagBtn = $('.js-add-to-cart[data-product-id = "' + $prodId + '"]');
+      var $soldOutBtn = $('.js-sold-out');
+      var $activePreOrderStatus = $('[data-product-id="' + $prodId + '"] .pre-order_active_msg');
+      var $tosPreOrderStatus = $('[data-product-id="' + $prodId + '"] .pre-order_tos_msg');
+      var $soldOutPreOrderStatus = $('[data-product-id="' + $prodId + '"] .pre-order_sold_msg');
+      var $inventortStatusList = $('.js-inv-status-list[data-product-id="' + $prodId + '"]');
+      var $quickShopContainer = $('.js-quickshop-container, .js-quickshop').length;
+      var $waitListBtn = $('.js-add-to-waitlist[data-product-id="' + $prodId + '"]');
+
+      $addToBagBtn.removeClass('preorder-button-disabled');
+
+      if (skuData.isPreOrder === 1 && skuData.INVENTORY_STATUS !== 3) {
+        $inventortStatusList.addClass('pre-order-container');
+
+        if ($quickShopContainer) {
+          $('.js-quickshop .product-quickshop__sku .js-inv-status-list.pre-order-container[data-product-id="' + $prodId + '"]').addClass('hidden');
+        }
+
+        switch (skuData.INVENTORY_STATUS) {
+          case 1:
+            $tosPreOrderStatus.addClass('hidden');
+            $soldOutPreOrderStatus.addClass('hidden');
+            $addToBagBtn.text(site.translations.product.pre_order_text);
+            $addToBagBtn.removeClass('preorder-button-disabled');
+            Drupal.behaviors.inventoryStatusV1.setPreorderMessage($activePreOrderStatus, site.translations.product.pre_order_active, skuData, true);
+            break;
+          case 2:
+            $activePreOrderStatus.addClass('hidden');
+            $soldOutPreOrderStatus.addClass('hidden');
+            $addToBagBtn.removeClass('hidden');
+            $addToBagBtn.text(site.translations.product.sold_out_stock_msg);
+            $addToBagBtn.addClass('preorder-button-disabled');
+            $('[data-product-id="' + $prodId + '"] .product-inventory-status__item--temp-out-of-stock').addClass('hidden');
+            Drupal.behaviors.inventoryStatusV1.setPreorderMessage($tosPreOrderStatus, site.translations.product.pre_order_out_stock, skuData, false);
+            break;
+          case 7:
+            $activePreOrderStatus.addClass('hidden');
+            $tosPreOrderStatus.addClass('hidden');
+            $waitListBtn.addClass('hidden');
+            $addToBagBtn.text(site.translations.product.sold_out_stock_msg);
+            $addToBagBtn.removeClass('hidden');
+            $soldOutBtn.addClass('hidden');
+            $addToBagBtn.addClass('preorder-button-disabled');
+            $('[data-product-id="' + $prodId + '"] .product-inventory-status__item--sold-out').addClass('hidden');
+            Drupal.behaviors.inventoryStatusV1.setPreorderMessage($soldOutPreOrderStatus, site.translations.product.pre_order_sold_out, skuData, false);
+            break;
+        }
+      } else {
+        $addToBagBtn.text(site.translations.product.product_cta_add_to_bag);
+        $activePreOrderStatus.addClass('hidden');
+        $tosPreOrderStatus.addClass('hidden');
+        $soldOutPreOrderStatus.addClass('hidden');
+        $inventortStatusList.removeClass('pre-order-container');
+        $addToBagBtn.removeClass('preorder-button-disabled');
+        $inventortStatusList.removeClass('hidden');
+      }
+    },
+    setPreorderMessage: function($ele, trKey, dateStr, calculateShipDays) {
+      if (dateStr) {
+        var releaseSkuDateStr = '' + dateStr.RELEASE_DATE;
+        var releaseSkuDate = new Date();
+        releaseSkuDate.setFullYear(parseInt('20' + releaseSkuDateStr.substr(0, 2)), parseInt(releaseSkuDateStr.substr(2, 2)) - 1, parseInt(releaseSkuDateStr.substr(4, 2)));
+        if (calculateShipDays) {
+          var shipDays = parseInt(site.translations.product.pre_order_shipDays);
+          var days = releaseSkuDate.getDate();
+          if (!isNaN(shipDays)) {
+            releaseSkuDate.setDate(days += shipDays);
+          }
+        }
+        var releaseDay = releaseSkuDate.getDate();
+        var releaseMonth = releaseSkuDate.getMonth() + 1;
+        var releaseDateReplace = releaseMonth + '/' + releaseDay;
+        $ele.html(trKey);
+        var msg = $ele.html().replace(/::rs_dt::/, releaseDateReplace);
+        $ele.html(msg);
+        $ele.removeClass('hidden');
+      }
+    },
+    selectSku: function($statusList, skuBaseId) {
+      $statusList.data('sku-base-id', skuBaseId);
+      var skuData = prodcat.data.getSku(skuBaseId);
+      Drupal.behaviors.inventoryStatusV1.update($statusList, skuData);
+    },
+  };
+})(jQuery);

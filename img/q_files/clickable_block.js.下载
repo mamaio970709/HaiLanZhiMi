@@ -1,0 +1,36 @@
+/**
+ * Clickable blocks - entire block will be clickable
+ * Styles are in _helpers.scss under .block--linked
+ *
+ * Usage:
+ * {{#link}} data-clickable="{{link_path}}"{{/link}}
+ * {{#url}} data-clickable="{{href}}"{{/url}}
+ */
+(function($) {
+  Drupal.behaviors.clickable = {
+    attach: function(context) {
+      var $theClickables = $('[data-clickable!=""][data-clickable]', context);
+      $theClickables.each(function() {
+        var $clickable = $(this);
+        var disableClick = false;
+
+        if ($clickable.parents('.js-basic-carousel__slide').length) {
+          $clickable.on('mousedown', function() {
+            disableClick = false;
+          }).on('mousemove', function() {
+            disableClick = true;
+          });
+        }
+        $clickable.once('clickable').addClass('block--linked').on('click', function(e) {
+          if ($(e.target).closest('.button').length > 0 || $(e.target).closest('.js-product-grid').length > 0 || disableClick) {
+            return;
+          }
+          if (window.location.hash) {
+            history.replaceState('', '', $(this).data('clickable')); // fix for hitchhiking hashes
+          }
+          window.location.href = $(this).data('clickable');
+        });
+      });
+    }
+  };
+})(jQuery);

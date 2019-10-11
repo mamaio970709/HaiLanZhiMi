@@ -1,0 +1,153 @@
+var generic = generic || {};
+
+(function($) {
+  'use strict';
+
+  var turnRelativeToAbsolute = function(urlToFix) {
+    if (!!urlToFix && urlToFix.substr(0,1) === '/') {
+        urlToFix = window.location.origin + urlToFix;
+    }
+    return urlToFix;
+  };
+
+  var applySocialMediaOffer = function(offerCode) {
+    site.userInfoCookie = site.userInfoCookie || {};
+    site.userInfoCookie.getValue = site.userInfoCookie.getValue || function() { return ''; };
+
+    var signedIn = parseInt( site.userInfoCookie.getValue('signed_in') );
+    var isLoyaltyMember = parseInt( site.userInfoCookie.getValue('is_loyalty_member') );
+
+  // if the user is signed in and a loyalty member apply the social media offer
+    if (signedIn && isLoyaltyMember && offerCode) {
+        var paramObj = {
+          'offer_code' : offerCode,
+          'do_not_defer_messages' : 1
+        };
+
+        generic.jsonrpc.fetch({
+          method: 'offers.apply',
+          params: [paramObj]
+        });
+    }
+  };
+
+  var setupShareLinks = function() {
+    // setup share links
+    var $shareLinks = $('.js-share');
+    $shareLinks.each(function() {
+      var $link = $(this);
+      var href = $link.attr('href');
+      if (!$link.data('href')) {
+        $link.data('href', href);
+        if ($link.parents('.js-quickshop').length) {
+          href = $link.parents('.js-quickshop').find('.js-spp-link').attr('href');
+          href = $link.data('href') + turnRelativeToAbsolute(href);
+        } else {
+          href = $link.data('href') + window.location.href;
+        }
+      }
+
+      if ($link.hasClass('js-share--facebook')) {
+        //$link.attr('offer_code', 'lyl_fb10');
+      }
+
+      if ($link.hasClass('js-share--twitter')) {
+        //$link.attr('offer_code', 'lyl_tw10');
+      }
+
+      if ($link.hasClass('js-share-weibo')) {
+        href += '&title=' + encodeURIComponent($link.data('title'));
+      }
+
+      if ($link.hasClass('js-share--pinterest')) {
+        //$link.attr('offer_code', 'lyl_pt20');
+
+        // Add default media for Pinterest
+        if (!$link.data('media')) {
+          var mediaURL = '';
+          if ($link.parents('.js-quickshop').length) {
+            mediaURL = $link.parents('.js-quickshop').find('.js-product-image').first().attr('src')
+          } else if ($link.parents('.product-full').find('.js-spp-carousel__slide').length) {
+            mediaURL = $('.js-product-image').eq(1).attr('src');
+          } else {
+            mediaURL = $('.js-product-image').first().attr('src');
+          }
+          mediaURL = turnRelativeToAbsolute(mediaURL);
+          $link.data('media', mediaURL);
+          href += '&media=' + $link.data('media');
+        }
+      }
+
+      $link.attr('href', href);
+    });
+
+    $('.js-share--share-email').on('click', function(e) {
+      e.preventDefault();
+      // Trigger Social Share overlay template with Product ID as input
+      var data = {};
+      data.product_id = $(this).attr('data-productid');
+      $(document).trigger('product:social_share:overlay', data);
+    });
+  };
+
+  $(document).on('product.quickshop.launch.inline product.quickshop.launch.inlineCarousel product.quickshop.launch.overlay', function() {
+    setupShareLinks();
+  });
+
+  $(document).on('product.updateShadeRoute', '.js-product', function(e, skuBaseId) {
+    var $shareLinks = $('.js-share');
+    $shareLinks.each(function() {
+      var $link = $(this);
+      var href = $link.attr('href');
+      if (!!$(this).data('href')) {
+        if ($link.parents('.js-quickshop').length) {
+          href = $link.parents('.js-quickshop').find('.js-spp-link').attr('href');
+          href = $link.data('href') + turnRelativeToAbsolute(href);
+        } else {
+          href = $link.data('href') + window.location.href;
+        }
+
+        if (!!$link.data('media')) {
+          var mediaURL = $link.data('media');
+          if ($link.parents('.js-quickshop').length) {
+            mediaURL = $link.parents('.js-quickshop').find('.js-product-large-image').attr('src');
+          } else if ($link.parents('.product-full').find('.js-spp-carousel').length) {
+            mediaURL = $('.js-product-image').eq(1).attr('src');
+          } else {
+            mediaURL = $('.js-product-image').first().attr('src');
+          }
+          mediaURL = turnRelativeToAbsolute(mediaURL);
+          $link.data('media', mediaURL);
+          href += '&media=' + $(this).data('media');
+        }
+      }
+      $link.attr('href', href);
+    });
+  });
+
+  $(document).on('click', '.js-share', function(event) {
+    var width = 600;
+    var height = 750;
+    var openUrlShare = $(this).attr('href');
+    var openUrl = openUrlShare.replace(/#/g, "%23");
+
+    // Allow for borders.
+    var leftPosition = (window.screen.width / 2) - ((width / 2) + 10);
+    // Allow for title and status bars.
+    var topPosition = (window.screen.height / 2) - ((height / 2) + 50);
+    var windowFeatures = "status=no,height=" + height + ",width=" + width;
+    windowFeatures += ",resizable=yes,left=" + leftPosition + ",top=" + topPosition;
+    windowFeatures +=  ",screenX=" + leftPosition + ",screenY=" + topPosition;
+    windowFeatures += ",toolbar=no,menubar=no,scrollbars=no,location=no,directories=no";
+
+    window.open(openUrl,'sharer', windowFeatures);
+    //applySocialMediaOffer($(this).attr('offer_code'));
+
+    event.preventDefault();
+  });
+
+  $(document).ready(function() {
+    setupShareLinks();
+  });
+
+})(jQuery);

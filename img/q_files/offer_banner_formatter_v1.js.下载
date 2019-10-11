@@ -1,0 +1,40 @@
+(function($){
+
+  Drupal.behaviors.offerBannerFormatter = {
+    attach: function(context) {
+      $offerBanner = $('.js-offer-banner-slider', context);
+      $offerBannerItem = $('.offer-banner-formatter__item', $offerBanner);
+      $sliderWrapper = $offerBanner;
+      var basicSlide = '.js-offer-banner-slide__item';
+
+      // autoplay settings
+      var autoplay = $offerBanner.attr('data-slides-autoplay');
+      if (typeof autoplay === 'undefined') {
+        autoplay = false;
+      } else {
+        autoplay = true;
+      }
+
+      var settings = {
+        arrows: true,
+        slide: basicSlide,
+        infinite: true,
+        slidesToShow: 1,
+        slidesToScroll: 1,
+        autoplay: autoplay,
+        autoplaySpeed: 5000,
+        adaptiveHeight: false,
+        fade: true
+      };
+
+      if ($offerBanner.length) { //fixes issue where banner blocks drupal login page
+        $offerBanner.removeClass('hidden');
+      }
+
+      if ($offerBannerItem.length > 1) {
+        $sliderWrapper.not('.slick-initialized').slick(settings);
+      }
+    }
+  };
+
+})(jQuery);

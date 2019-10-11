@@ -1,0 +1,105 @@
+/* global site, generic */
+(function($, generic) {
+  /**
+    * Event listener to display the waitlist overlay.
+    * Event trigger comes from module product_waitlist_v1.
+  */
+  $(document).on('product.waitlist.overlay', function(event, data) {
+    Drupal.behaviors.productWaitlistOverlayV1.launch(data);
+  });
+
+  Drupal.behaviors.productWaitlistOverlayV1 = {
+
+    /**
+      * Drupal behavior method to handle the waitlist overlay display and functionality.
+      * After the 'product.waitlist.overlay' event is fired, the product's data is passed to the launch method.
+      * The product_waitlist_overlay inline template is then rendered and displayed using generic.overlay.launch.
+      * Once rendered, the waitlist form submit rpc is initialized.
+      * Form submission either results in a success message or errors displaying inline.
+      * All messaging copy is handled within the waitlist module in the CMS.
+    */
+    launch: function(data) {
+      var that = this;
+
+      var rendered = site.template.get({
+        name: 'product_waitlist_overlay',
+        data: data
+      });
+
+      generic.overlay.launch({
+        content: rendered,
+        cssStyle: {
+          width: '500px',
+          height: '300px'
+        },
+        onComplete: function(response) {
+          var $overlayCont = $('.js-waitlist-container');
+          var $formCont = $('.js-waitlist-form-container', $overlayCont);
+          var $form = $('.js-waitlist-form', $overlayCont);
+          var $submit = $('.js-waitlist-submit', $overlayCont);
+          // var $email = $('.js-waitlist-email', $overlayCont); // defined but never user
+          var $requestType = $('.js-waitlist-request-type', $overlayCont);
+          var $skuBaseId = $('.js-waitlist-sku-base-id', $overlayCont);
+          var $catBaseId = $('.js-waitlist-cat-base-id', $overlayCont);
+          var $successCont = $('.js-waitlist-success', $overlayCont);
+          var $errorList = $('.js-error-messages', $overlayCont);
+
+          // Set request type.
+          var requestType = parseInt(data.INVENTORY_STATUS) === that.statusIds.inventory.soldOut || parseInt(data.INVENTORY_STATUS) === that.statusIds.inventory.tempOOS ? 'BIS' : 'CS';
+          $requestType.val(requestType);
+          // Set sku_base_id and cat_base_id in the form.
+          $skuBaseId.val(data.SKU_BASE_ID);
+          var catBaseId = '';
+          if (data && data.PARENT_CAT_ID) {
+            var matchResult = data.PARENT_CAT_ID.match(/[0-9]+/);
+            if (matchResult) {
+              catBaseId = matchResult[0];
+            }
+          }
+          $catBaseId.val(catBaseId);
+
+          $form.on('submit', function(e) {
+            e.preventDefault();
+
+            var pObj = {};
+            var params = $(this).serializeArray();
+            for (var i = 0, len = params.length; i < len; i++) {
+              pObj[params[i].name] = params[i].value;
+            }
+            if ($.cookie('csrftoken')) {
+              pObj['_TOKEN'] = $.cookie('csrftoken');
+            }
+
+            generic.jsonrpc.fetch({
+              method: 'form.get',
+              params: [pObj],
+              onSuccess: function(r) {
+                $formCont.hide();
+                $successCont.show();
+              },
+              onFailure: function(r) {
+                var errorObj = r.getError();
+                var errorArray = errorObj.data.messages;
+                generic.showErrors(errorArray, $errorList);
+              }
+            });
+          });
+        }
+      });
+    },
+
+    /**
+      * Status ids used by the waitlist overlay; adjust accordingly.
+    */
+    statusIds: {
+      inventory: {
+        tempOOS: 2,
+        comingSoon: 3,
+        soldOut: 7
+      },
+      lifeOfProduct: {
+        basicReorder: 2
+      }
+    }
+  };
+})(jQuery, generic);

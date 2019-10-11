@@ -1,0 +1,138 @@
+var generic = generic || {};
+var site = site || {};
+site.userInfoCookie = site.userInfoCookie || {};
+site.userInfoCookie.getValue = site.userInfoCookie.getValue || function() {
+  return '';
+};
+
+(function($) {
+  site.signin = {
+    isSignedIn: 0,
+    $template: '',
+    initSignInForm: function() {
+      var self = this;
+      var $login = $('.login', self.$template);
+      var $registration = $('.registration', self.$template);
+      var $form = $('#login__form', $login);
+      var $submit = $('.js-signin-submit', $login);
+      var $registrationSwitch = $('.js-register-switch', $login);
+      var $returnUrl = $('input[name="RETURN_URL"]', $form);
+      var $forgotPassword = $('.js-forgot-password', $login);
+      var $errorNode = $('p#gnav-lpw-text', $login);
+      var $forgotNote = $('p#gnav_forgot_pw_note');
+      // Make sure that the form action points to the SSL version
+      $form.attr('action', 'https://' + window.location.hostname + '/account/signin.tmpl');
+      $returnUrl.val('/account/index.tmpl');
+
+      if ($forgotPassword.length > 0) {
+        site.signin.forgotPasswordReturnuser({
+          resetPassword: true,
+          emailNode: $('.js-login-email-phone', $login),
+          errorListNode: $errorNode,
+          forgotPasswordLink: $forgotPassword,
+          forgotPasswordNote: $forgotNote,
+        });
+      }
+
+      $submit.once().click(function(e) {
+        e.preventDefault();
+        $form.submit();
+        return false;
+      });
+
+      $registrationSwitch.click(function() {
+        $login.hide();
+        $registration.show();
+      });
+    },
+    initRegistrationForm: function() {
+      var self = this;
+      var $registration = $('.registration', self.$template);
+      var $login = $('.login', self.$template);
+      var $form = $('#registration__form', $registration);
+      var $showPass = $('input[name="show_pass"]', $registration);
+      var $password = $('input[name="PASSWORD"]', $registration);
+      var $submit = $('.js-registration-submit', $registration);
+      var $loginSwitch = $('.js-login-switch', $registration);
+      var $returnUrl = $('input[name="RETURN_URL"]', $registration);
+
+      // Make sure that the form action points to the SSL version
+      $form.attr('action', 'https://' + window.location.hostname + '/account/signin.tmpl');
+      $returnUrl.val('/account/index.tmpl');
+      if ($.cookie('csrftoken')) {
+        $form.append('<input type="hidden" name="_TOKEN" value="' + $.cookie('csrftoken') + '" />');
+      }
+
+      $showPass.removeAttr('checked');
+      $showPass.click(function() {
+        var isChecked = $(this).is(':checked');
+        $password[0].type = isChecked ? 'text' : 'password';
+      });
+
+      $submit.once().click(function(e) {
+        e.preventDefault();
+        $form.submit();
+        return false;
+      });
+
+      $loginSwitch.click(function() {
+        $registration.hide();
+        $login.show();
+      });
+    },
+
+    initAccountLinks: function() {
+      var self = this;
+      var $login = $('.login', self.$template);
+      var $registration = $('.registration', self.$template);
+      var $account = $('.account-links', self.$template);
+      var $welcome = $('.account-links__welcome', self.$template);
+      var $userName = $('.account-links__name', self.$template);
+      $(self.$template).addClass('is_signed_in');
+      var user = site.userInfoCookie.getValue('first_name');
+      if (!_.isUndefined(user) && !_.isNull(user)) {
+        $userName.html(user);
+        $welcome.show();
+      } else {
+        $welcome.hide();
+      }
+      $login.hide();
+      $registration.hide();
+      $account.show();
+    },
+    init: function() {
+      var self = this;
+      if (site.signin.isSignedIn === '0') {
+        self.initSignInForm();
+        self.initRegistrationForm();
+      } else if (site.signin.isSignedIn === '1') {
+        self.initAccountLinks();
+      }
+    }
+  };
+
+  Drupal.behaviors.gnavAccountV1 = {
+    attach: function(context) {
+      site.signin.isSignedIn = typeof site.userInfoCookie == 'undefined'
+                            || _.isUndefined(site.userInfoCookie.getValue('signed_in'))
+                            || _.isNull(site.userInfoCookie.getValue('signed_in'))
+        ? 0 : site.userInfoCookie.getValue('signed_in');
+      site.signin.$template = $('.sign-in', context);
+      site.signin.init();
+
+      var $thisContent = $('.js-gnav-util-trigger-account').next('.js-gnav-util-content');
+
+      $(document).on('mouseover', '.js-site-header-utility-not-signed-in', function(event) {
+        event.preventDefault();
+        if ($('.gnav-util--account').length) {
+          $('body').removeClass('mobile-gnav-active');
+          $thisContent.removeClass('hidden');
+        }
+      }).on('mouseout', '.gnav-util__content--account', function(event) {
+        if (!$(event.target).is('input, span')) {
+          $(this).addClass('hidden');
+        }
+      });
+    }
+  };
+})(jQuery);

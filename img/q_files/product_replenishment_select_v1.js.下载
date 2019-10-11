@@ -1,0 +1,77 @@
+(function($) {
+
+  Drupal.behaviors.productReplenishmentSelectV1 = {
+    attach: function(context, settings) {
+      // Add replenishment menu event if enable_replenishment=true in config.
+      if (!settings.common || !settings.common.has_replenishment) {
+        return null;
+      }
+
+      var $template = $('.js-product-replenishment-select--v1', context);
+      var $addBtn = $('.js-add-to-cart', '.js-product');
+      var $replenishmentOneTime = $('.js-replenishment-one-time', $template);
+      var $replenishmentSelect = $('.js-replenishment-select', $template);
+      var $replenishmentSelectLabel = $('.js-product-replenishment-select-label', $template);
+      var activeBtnClass = 'button--active';
+      var activeSelectClass = 'selectBox-menuActive';
+      var replenishmentOneTimeText = $replenishmentOneTime.text();
+      var $overlayTrigger = $('.js-product-auto-replenishment-open', context);
+
+      function resetReplenishmentSelect() {
+        if (!$replenishmentSelect.length) {
+          return null;
+        }
+        $replenishmentSelect.removeClass(activeSelectClass);
+        $replenishmentSelect.val(0);
+        $replenishmentSelect.selectBox('refresh');
+        $replenishmentSelectLabel.text(replenishmentOneTimeText);
+      }
+
+      $replenishmentOneTime.once().click(function() {
+        $addBtn.attr('data-replenishment', 0);
+        if (!$(this).hasClass(activeBtnClass)) {
+          $(this).addClass(activeBtnClass);
+        }
+        resetReplenishmentSelect();
+      });
+
+      // Launch product_auto_replenishment partial in overlay
+      $overlayTrigger.on('click',function() {
+        var rendered = site.template.get({
+          name: 'product_auto_replenishment'
+        });
+        generic.overlay.launch({
+          content: rendered,
+          onComplete: function() {
+            generic.overlay.initLinks();
+          },
+        });
+      });
+
+      // When the replenishment select changes, update the add-to-bag
+      // button's data-replenishment value.
+      $replenishmentSelect.on('change', function() {
+        var btnVal = (this.value !== '_') ? this.value : 0;
+        var replenishmentSelectText = this.options[this.selectedIndex].text;
+        $addBtn.attr('data-replenishment', btnVal);
+        if (btnVal === 0) {
+          $replenishmentOneTime.addClass(activeBtnClass);
+          resetReplenishmentSelect();
+        } else {
+          $replenishmentOneTime.removeClass(activeBtnClass);
+          $replenishmentSelect.addClass(activeSelectClass);
+          $replenishmentSelectLabel.text(replenishmentSelectText);
+        }
+      });
+
+      // Set add-to-bag default replenishment value to 0.
+      $addBtn.attr('data-replenishment', 0);
+
+      var self = this;
+      $(document).on('product.quickshop.launch.overlay product.quickshop.launch.inline', function(event, newContext) {
+        self.attach(newContext, Drupal.settings);
+      });
+    }
+  };
+
+})(jQuery);

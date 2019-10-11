@@ -1,0 +1,661 @@
+var prodcat = prodcat || {};
+prodcat.ui = prodcat.ui || {};
+prodcat.data = prodcat.data || {};
+var site = site || {};
+
+(function($, generic) {
+  /**
+   * Adds SKUs to cart.
+   * @param {Object} args: product data
+   * @returns {void}
+   */
+  prodcat.ui.addToCart = function(args) {
+    var skuBaseId;
+    if (args.skuData && args.skuData.SKU_BASE_ID) {
+      skuBaseId = args.skuData.SKU_BASE_ID;
+    } else if (args.skuBaseId) {
+      skuBaseId = args.skuBaseId;
+    } else {
+      return;
+    }
+
+    var quantity;
+    if (typeof args.quantity !== 'undefined') {
+      quantity = args.quantity;
+    } else {
+      quantity = 1;
+    }
+
+    var catBaseId = '';
+    if (args.skuData && args.skuData.PARENT_CAT_ID) {
+      var matchResult = args.skuData.PARENT_CAT_ID.match('[0-9]+');
+      if (matchResult) {
+        catBaseId = matchResult[0];
+      }
+    }
+
+    args.skus = args.skus || (_.isString(skuBaseId) ? [skuBaseId] : skuBaseId);
+    args.itemType = args.itemType || 'cart';
+    args.QTY = quantity || args.QTY;
+    args.INCREMENT = 1; // INCREMENT only needs to be true.
+
+    // Conditionally add a CAT_BASE_ID key to the list of parameters to send
+    var cbid = args.CAT_BASE_ID || catBaseId;
+    if (cbid.length > 0) {
+      args.CAT_BASE_ID = cbid;
+    }
+
+    generic.checkout.cart.updateCart({
+      params: args,
+      onSuccess: function(r) {
+        var resultData = r.getData();
+        $(document).trigger('addToCart.toggle', [args.$addBtn]);
+        $(document).trigger('addToCart.success', [resultData]);
+      },
+      onFailure: function(ss) {
+        var errorObjectsArray = ss.getMessages();
+        $(document).trigger('addToCart.toggle', [args.$addBtn]);
+        $(document).trigger('addToCart.failure', [errorObjectsArray]);
+      }
+    });
+  };
+
+  /**
+   * Adds a SKU to the user's primary favorites list.
+   * @param {Object} args: product data
+   * @returns {void}
+   */
+  prodcat.ui.addToFavorites = function(args) {
+    var params = {
+      _SUBMIT: 'alter_collection',
+      action: 'add'
+    };
+    if ($.cookie('csrftoken')) {
+      params._TOKEN = $.cookie('csrftoken');
+    }
+    if (args.action) {
+      params.action = args.action;
+    }
+
+    if ($.cookie('csrftoken')) {
+      params._TOKEN = $.cookie('csrftoken');
+    }
+
+    var skuBaseId;
+    if (args.skuData && args.skuData.SKU_BASE_ID) {
+      skuBaseId = args.skuData.SKU_BASE_ID;
+    } else if (args.skuBaseId) {
+      skuBaseId = args.skuBaseId;
+    } else {
+      return;
+    }
+    params.SKU_BASE_ID = skuBaseId;
+
+    if (args.skuData && args.skuData.PARENT_CAT_ID) {
+      var matchResult = args.skuData.PARENT_CAT_ID.match('[0-9]+');
+      if (matchResult) {
+        params.CAT_BASE_ID = matchResult[0];
+      }
+    }
+
+    generic.jsonrpc.fetch({
+      method: 'rpc.form',
+      params: [params],
+      onSuccess: function(jsonRpcResponse) {
+        var d = jsonRpcResponse.getData();
+        var r = d.ac_results[0].result;
+        var cr;
+
+        // To toggle EMPTY/FILLED Heart icon when the user clicks FAV icon in
+        // account overview and order history pages.
+        if (args.$el.hasClass('js-favorite-icon-toggle')) {
+          args.$el.toggleClass('hidden').siblings('.js-favorite-icon-toggle').toggleClass('hidden');
+        }
+
+        if (params.action !== 'delete') {
+          if (r.KEY === 'SKU_ALREADY_IN_COLLECTION.ADD_SKU.COLLECTION.SAVE') {
+            cr = jsonRpcResponse.getCartResults();
+            $(document).trigger('addToWishlist.exists', [cr, args.$el]);
+          } else if (r.SUCCESS === 1 || r.KEY === 'SUCCESS.ADD_SKU.COLLECTION.SAVE') {
+            cr = jsonRpcResponse.getCartResults();
+            $(document).trigger('addToWishlist.success', [cr, args.$el]);
+          }
+        } else {
+          cr = jsonRpcResponse.getCartResults();
+          $(document).trigger('addToWishlist.removed', [cr, args.$el]);
+        }
+      },
+      onFailure: function(ss) {
+        var errorObjectsArray = ss.getMessages();
+        $(document).trigger('addToWishlist.failure', [errorObjectsArray]);
+      }
+    });
+  };
+
+  prodcat.ui.grids = (function() {
+    var grids = [];
+    return $.extend(prodcat.ui.grids || {}, {
+      add: function(grid) {
+        if (_.indexOf(grids, grid) === -1) { // if we can't find the grid in our list
+          grids.push(grid);
+        }
+      },
+      clean: function(args) {
+        if (args.before && typeof args.before === 'function') {
+          args.before(grids);
+        }
+        site.util.grids.attach(grids);
+        if (args.after && typeof args.before === 'function') {
+          args.after(grids);
+        }
+        grids = [];
+      }
+    });
+  }());
+
+  // Default product listeners:
+
+  $(document).on('product.init', '.js-product', function() {
+    // console.log('product.init');
+    var $product = $(this);
+    var prodData = prodcat.data.getProduct($product.data('product-id'));
+    var routePrefix = !!prodData && prodData.shaded ? '/shade/' : '/sku/';
+    var hash = location.hash;
+    var routeStringAfter = hash.split('#' + routePrefix)[1];
+    var isSPP = $product.hasClass('product-full');
+    var isQuickShop = $product.hasClass('js-quickshop');
+    var skuBaseId;
+
+    // Check for sku routing in the SPP url
+    if (isSPP) {
+      skuBaseId = /^\d+$/.test(routeStringAfter) ? routeStringAfter : '';
+    } else {
+      skuBaseId = $product.attr('data-sku-base-id') ? $product.attr('data-sku-base-id') : $product.data('sku-base-id');
+    }
+
+    if (!skuBaseId && !!prodData && (isQuickShop || (isSPP && prodData.skus.length === 1))) {
+      if (prodData.defaultSku) {
+        skuBaseId = prodData.defaultSku.SKU_BASE_ID;
+      }
+
+      // if defaultSku is Sold Out, pick first shoppable sku
+      if (!prodData.defaultSku.isShoppable && prodData.skus.length > 1) {
+        var validSku = _.findWhere(prodData.skus, {isShoppable: 1});
+        skuBaseId = !!validSku ? validSku.SKU_BASE_ID : skuBaseId;
+      }
+    }
+
+    var routerAction = {
+      changeSku: function(skuID) {
+        if (!isSPP) {
+          return;
+        }
+        var skuData = prodcat.data.getSku(skuID);
+        if (skuData) {
+          skuBaseId = skuID;
+        }
+      },
+      changeSppShade: function(shadeName) {
+        if (!isSPP) {
+          return;
+        }
+
+        routeNoSpaces = decodeURIComponent(shadeName).split('_').join(' ');
+
+        _.each(prodData.skus, function(sku) {
+          if (routeNoSpaces === sku.SHADENAME) {
+            skuBaseId = sku.SKU_BASE_ID;
+          }
+        });
+      }
+    };
+
+    var routes;
+    if (!!prodData && prodData.shaded) {
+      routes = {
+        '/shade/:shadeName': routerAction.changeSppShade
+      };
+    } else {
+      routes = {
+        '/sku/:skuID': routerAction.changeSku
+      };
+    }
+
+    var router = Router(routes);
+    router.init();
+
+    $(this).trigger('product.initFavoritesTooltip', [$product]);
+
+    // Select the default sku if set:
+    if (!!skuBaseId) {
+      $(this).trigger('product.skuSelect', [skuBaseId]);
+    } else {
+      // Note: we shouldn't trigger 'product.updateInvStatus' here. This event (product.init) isn't tied to the
+      //       L2 call (inv_status_data:updated / product.updateInvStatus), so we don't know if we actually have
+      //       the inventory data back yet. The product.updateInvStatus event will be triggered (via the handler
+      //       for the inv_status_data:updated event defined in this file) post L2 anyway.
+      // update inventory status:
+      $(this).trigger('product.updateInvStatus');
+    }
+  });
+
+  $(document).on('product.updateInvStatus', '.js-product', function() {
+    var $addBtn = $('.js-add-to-cart, .js-add-to-bag', this);
+    var $soldOutBtn = $('.js-sold-out', this);
+    var $outOfStockBtn = $('.js-out-of-stock', this);
+    var $comingSoonBtn = $('.js-coming-soon', this);
+    var skuBaseId = $addBtn.data('sku-base-id') || $(this).data('sku-base-id');
+    var skuDataL2 = prodcat.data.getSku(skuBaseId);
+    var $parentGrid;
+    var parentGridOverrideStatus;
+    var reorderStatuses = [ // these are the statuses that will trigger a product block to be reordered
+      2, // Temporarily Sold Out
+      3, // Coming Soon
+      7 // Sold Out
+    ];
+    var reorderTest = function(l2Cache) {
+      if (!!l2Cache && !!l2Cache.INVENTORY_STATUS) {
+        return _.contains(reorderStatuses, parseInt(l2Cache.INVENTORY_STATUS));
+      }
+      return false;
+    };
+
+    if (!$addBtn.length) {
+      return;
+    }
+
+    $parentGrid = $(this).parents('.js-product-grid');
+    parentGridOverrideStatus = $parentGrid.data('sold-out-reordering-override');
+    // Reordering sold out products (inv. status 7), to be last in display order on MPPs/anywhere they appear in a grid
+    if ($parentGrid.is('.js-sold-out-reordering') && parentGridOverrideStatus !== 'off' || parentGridOverrideStatus === 'on') {
+      // @TODO - causing a bug with the grid
+      //reorderSoldOut(prodcat.data.getProduct($(this).data('product-id')).skus, this);
+    }
+
+    var hasWaitlist = Drupal.settings.common && Drupal.settings.common.has_waitlist;
+    var miscFlagValue = Drupal.settings.common && Drupal.settings.common.product_coming_soon_misc_flag ? Drupal.settings.common.product_coming_soon_misc_flag : 0;
+
+    // Default button states
+    $outOfStockBtn.addClass('hidden').on('click', function(e) {
+      e.preventDefault();
+    });
+    $soldOutBtn.addClass('hidden').on('click', function(e) {
+      e.preventDefault();
+    });
+    $comingSoonBtn.addClass('hidden').on('click', function(e) {
+      e.preventDefault();
+    });
+
+    if (!skuDataL2) {
+      skuDataL2 = {};
+    }
+
+    $(document).trigger('product.waitlist.reset', skuDataL2);
+
+    // Set appropriate button states once default state is set.
+    if (!skuDataL2.isShoppable) {
+      $addBtn.addClass('button--disabled').data('disabled', true);
+      if (skuDataL2.INVENTORY_STATUS === 2) { // Temporarily Out of Stock
+        if (hasWaitlist) { // Notify Me
+          $(document).trigger('product.waitlist.init', skuDataL2);
+        } else {
+          $outOfStockBtn.removeClass('hidden');
+          $addBtn.addClass('hidden').data('disabled', true);
+        }
+      } else if (skuDataL2.INVENTORY_STATUS === 3) { // Coming Soon
+        if (hasWaitlist && (miscFlagValue === 0 || skuDataL2.MISC_FLAG === miscFlagValue)) { // Display Notify Me Button when MISC_FLAG is 0
+          $(document).trigger('product.waitlist.init', skuDataL2);
+        } else {
+          $comingSoonBtn.removeClass('hidden');
+          $addBtn.addClass('hidden').data('disabled', true);
+        }
+      } else if (skuDataL2.INVENTORY_STATUS === 7) {
+        $soldOutBtn.removeClass('hidden');
+        $addBtn.addClass('hidden').data('disabled', true);
+      }
+    } else {
+      if (hasWaitlist) {
+        $(document).trigger('product.waitlist.reset', skuDataL2);
+      }
+
+      $addBtn.removeClass('button--disabled hidden').data('disabled', false);
+
+      if (_.every(skuDataL2, reorderTest)) {
+        // '$el' is not defined
+        // $el.closest('.js-product-grid-item').appendTo($el.closest('.js-product-grid-item').parent());
+        // prodcat.ui.grids.add($el.closest('.js-product-grid').get(0));
+      }
+    }
+  });
+
+  $(document).on('product.updateInvStatusFinished', function() {
+    prodcat.ui.grids.clean({
+      before: function(grids) {
+        _.each(grids, function(grid) {
+          var $grid = $(grid);
+          var hasQuickshop = $grid.hasClass('product-grid--quickshop');
+
+          if (hasQuickshop && prodcat.ui.quickshop) {
+            prodcat.ui.quickshop.reset($grid);
+          }
+        });
+      },
+      after: function(grids) {
+        _.each(grids, function(grid) {
+          var $grid = $(grid);
+          var hasQuickshop = $grid.hasClass('product-grid--quickshop');
+
+          if (hasQuickshop && prodcat.ui.quickshop) {
+            prodcat.ui.quickshop.init($grid);
+          }
+        });
+      }
+    });
+  });
+
+  $(document).on('product.quickshopInit', function(e, methods) {
+    prodcat.ui.quickshop = _.extend(prodcat.ui.quickshop || {}, methods);
+  });
+
+  $(document).on('product.skuSelect', '.js-product', function(e, skuBaseId) {
+    $(this).data('sku-base-id', skuBaseId);
+    $('.js-add-to-cart, .js-add-to-bag', this).data('sku-base-id', skuBaseId);
+    $('.js-add-to-favorites', this).data('sku-base-id', skuBaseId);
+
+    $(this).trigger('product.updateInvStatus');
+  });
+
+  $(document).on('inv_status_data:updated', '.js-product', function() {
+    $(this).trigger('product.updateInvStatus');
+  });
+
+  $(document).on('inv_status_data:finished', function() {
+    $(this).trigger('product.updateInvStatusFinished');
+  });
+
+  // SPP links open in new window if spp_in_new_window=true in config
+  if (Drupal.settings.common && Drupal.settings.common.spp_in_new_window) {
+    $(document).on('click', '.js-spp-link', function() {
+      $(this).attr('target', '_blank');
+    });
+  }
+
+  $(document).on('click', '.js-add-to-cart, .js-add-to-bag', function(e) {
+    e.preventDefault();
+    var $addBtn = $(this);
+    if ($addBtn.data('disabled')) {
+      return;
+    }
+    var skuBaseId = $addBtn.data('sku-base-id');
+    if (!skuBaseId || skuBaseId.length < 1) {
+      return;
+    }
+
+    // Trigger the button toggle event to show loading message until all this code and RPC call are complete.
+    $(document).trigger('addToCart.toggle', [$addBtn]);
+
+    // Account for adding multiple skus to bag
+    var args = {};
+    skuBaseId = String(skuBaseId);
+    if (skuBaseId.indexOf(',') >= 0) {
+      // clean the string
+      skuBaseId = skuBaseId.replace(/(\s|\r\n|\n|\r)/gm, '');
+      args.skuBaseId = skuBaseId.split(',');
+      if (skuBaseId.slice(-1) === ',') {
+        args.skuBaseId.pop();
+      }
+    } else {
+      args.skuBaseId = skuBaseId;
+    }
+
+    var quantity = $addBtn.data('qty');
+    if (!!quantity) {
+      args.quantity = quantity;
+    }
+
+    // Replenishment updates when sku is refillable and enable_replenishment=true in config.
+    //  (currently applicable only when adding one item at a time)
+    if (_.isString(args.skuBaseId) && Drupal.settings.common && Drupal.settings.common.has_replenishment) {
+      var skuDataL2 = prodcat.data.getSku(args.skuBaseId);
+      if (skuDataL2.REFILLABLE) {
+        var frequency = $addBtn.attr('data-replenishment');
+        if (!!frequency) {
+          args.REPLENISHMENT_FREQ = frequency;
+        } else {
+          args.REPLENISHMENT_FREQ = 0;
+        }
+        args.action = 'add';
+        args.itemType = 'replenishment';
+        args.add_to_cart = 1;
+      }
+    }
+
+    args.$addBtn = $addBtn;
+
+    prodcat.ui.addToCart(args);
+  });
+
+  /*
+   ***********************
+   * Add-to-favorites button
+   ***********************
+   */
+  var tooltipsterDefaultSettings = {
+    animation: 'fade',
+    arrow: false,
+    contentAsHTML: true,
+    interactive: true,
+    multiple: true,
+    onlyOne: true,
+    position: 'top',
+    restoration: 'none',
+    speed: 500,
+    theme: 'tooltipster-cremedelamer2',
+    timer: 3000,
+    trigger: 'click',
+    updateAnimation: false
+  };
+
+  $(document).on('product.initFavoritesTooltip', function(e, $product) {
+    // console.log('product.initFavoritesTooltip');
+    var $faveLink = $product.find('.js-add-to-favorites');
+    $faveLink.tooltipster(tooltipsterDefaultSettings);
+  });
+
+  $(document).on('click', '.js-add-to-favorites', function(e) {
+    e.preventDefault();
+    var $this = $(this);
+    var skuBaseId = $this.data('sku-base-id');
+
+    $this.tooltipster('disable').tooltipster('hide', function() {
+      if ($this.hasClass('favorite-added')) {
+        prodcat.ui.addToFavorites({skuBaseId: skuBaseId, $el: $this, action: 'delete'});
+      } else {
+        prodcat.ui.addToFavorites({skuBaseId: skuBaseId, $el: $this, action: 'add'});
+      }
+    });
+  });
+
+  /*
+   ***********************
+   * display text fields (price, shade name, etc)
+   ***********************
+   */
+  $(document).on('product.skuSelect product.skuDisplay', '.js-product', function(e, skuBaseId) {
+    $(this).trigger('product.updateText', [skuBaseId]);
+    $(this).trigger('product.updateRoute', [skuBaseId]);
+  });
+
+  $(document).on('product.updateText', '.js-product', function(e, skuBaseId) {
+    var textFields = [
+      { selector: 'js-product-size', field: 'PRODUCT_SIZE' },
+      { selector: 'js-product-price', field: 'formattedPrice' },
+      { selector: 'js-product-price-taxed-price', field: 'formattedTaxedPrice' },
+      { selector: 'js-sku-shade-name', field: 'SHADENAME' },
+      { selector: 'js-sku-shade-description', field: 'SHADE_DESCRIPTION' },
+      { selector: 'js-ap-price', field: 'formattedInstallmentPrice' }
+    ];
+    var skuData = prodcat.data.getSku(skuBaseId);
+    var $productEl = $(this);
+
+    _.each(textFields, function(el) {
+      var $el = $('.' + el.selector, $productEl);
+      if ($el.length < 1) {
+        return;
+      }
+      $el.html(skuData[el.field]);
+    });
+  });
+
+  // @TODO: This probably needs to be smarter, giving a specific message to the user,
+  //        if this is something they've already favorited. Also, the already favorited
+  //        products should have their state set correctly on page load, somehow (currently,
+  //        they're not).
+  $(document).on('addToWishlist.success addToWishlist.exists', function(event, cr, $el) {
+    // Set the link to "remove, in the wake of a successful favoriting (even if it was already a favorite)
+    $el.addClass('favorite-added');
+    $el.find('.js-add-to-favorites-label').hide();
+    $el.find('.js-remove-from-favorites-label').show();
+
+    // Show the tooltip
+    $el.tooltipster('content', $el.data('tooltip-success'));
+    $el.tooltipster('enable').tooltipster('show');
+  });
+
+  $(document).on('addToWishlist.removed', function(event, cr, $el) {
+    // Set link to "add", in the wake of a successful unfavoriting
+    $el.removeClass('favorite-added');
+    $el.find('.js-remove-from-favorites-label').hide();
+    $el.find('.js-add-to-favorites-label').show();
+
+    // Show the tooltip
+    $el.tooltipster('content', $el.data('tooltip-removed'));
+    $el.tooltipster('enable').tooltipster('show');
+
+    // Remove unfavorite product from list
+    if ($el.closest('.js-remove-parent').siblings().length) {
+      $el.closest('.js-remove-parent').remove();
+    } else {
+      window.location.href = window.location.pathname;
+    }
+  });
+
+  // @TODO: This probably needs to be nicer, not just dumping errors to an alert
+  $(document).on('addToCart.failure addToWishlist.failure', function(event, errorObjectsArray) {
+    // Escape any html in the alert box.
+    // var prodAddedMsg = $('<div/>').html(errorObjectsArray[0].text).text();
+    // alert(prodAddedMsg);
+    var $errorMessageContainer = $('<div/>', {
+      'class': 'cart-error-container',
+      html: '<span class="cart-error-message">' + errorObjectsArray[0].text + '</span>'
+    });
+    generic.overlay.launch({
+      content: $errorMessageContainer,
+      includeBackground: true,
+      cssClass: 'add_cart_response',
+      onComplete: function() {
+        $(this).colorbox.resize();
+      }
+    });
+  });
+
+  /**
+   * Toggles the visibility of an add-to button, and its sibling loading message
+   */
+  // $(document).on('addToCart.toggle', function(event, $addBtn) {
+  //   if (!$addBtn || $addBtn.length < 1) {
+  //     return;
+  //   }
+
+  //   $addBtn.toggleClass('hidden');
+
+  //   var loadingDiv = $addBtn.siblings('.js-loading-message').eq(0);
+
+  //   if (loadingDiv && loadingDiv.length > 0) {
+  //     loadingDiv.toggleClass('hidden');
+  //   }
+  // });
+
+  $(document).on('addToCart.toggle', function(event, $addBtn) {
+    if (!$addBtn || $addBtn.length < 1) {
+      return;
+    }
+
+    var loadingDiv = $addBtn.siblings('.js-loading-message');
+    var successDiv = $addBtn.siblings('.js-success-message');
+
+    if (!$addBtn.hasClass('hidden')) { // on first toggle:
+      $addBtn.addClass('hidden'); // - hide add button
+      loadingDiv.removeClass('hidden'); // - show loading message
+    } else { // on next toggle (success):
+      loadingDiv.addClass('hidden'); // - hide loading message
+      successDiv.removeClass('hidden'); // - show success message
+      setTimeout(function() { // after timeout:
+        successDiv.addClass('hidden'); // - hide success message
+        $addBtn.removeClass('hidden'); // - show add button
+      }, 2000);
+    }
+  });
+
+  $(document).on('product.updateRoute', '.js-product', function(e, skuBaseId) {
+    var $product = $(this);
+    var skuData = prodcat.data.getSku(skuBaseId);
+    var prodId = !!skuData ? skuData.PRODUCT_ID : $product.attr('data-product-id');
+    var prodData = prodcat.data.getProduct(prodId);
+    var isProdSized = (!!prodData && prodData.sized) || $product.attr('data-product-sized') ? 1 : 0;
+    var routePrefix = !isProdSized ? '#/shade/' : '#/sku/';
+
+    var routeString;
+    if (skuData) {
+      if (isProdSized) {
+        routeString = _.result(skuData, 'SKU_BASE_ID');
+      } else {
+        routeString = _.result(skuData, 'SHADENAME');
+      }
+    } else {
+      routeString = $product.attr('data-product-route') || '';
+    }
+
+    // include reserved characters missing from encodeURIComponent()
+    function _fixedEncodeURIComponent(str) {
+      return encodeURIComponent(str).replace(/[!'()*]/g, function(c) {
+        return '%' + c.charCodeAt(0).toString(16);
+      });
+    }
+
+    if (!!routeString) {
+      var $sppLinks = $('.js-spp-link', $product);
+      routeNoSpaces = _fixedEncodeURIComponent(routeString.toString().split(' ').join('_'));
+
+      $sppLinks.each(function() {
+        var url = prodData ? prodData.url : $(this).attr('href');
+        $(this).attr('href', url + routePrefix + routeNoSpaces);
+      });
+      // Add support to deep link if a custom hash is present
+      var hasCustomHash = false;
+      if (window.location.hash) {
+        hasCustomHash = !window.location.hash.match(/sku/g) && !window.location.hash.match(/shade/g);
+      }
+      if ($product.hasClass('product-full') && !hasCustomHash) {
+        var routeWithQueryString = window.location.hash;
+        if (routeWithQueryString.indexOf('?') >= 0) {
+          routeNoSpaces += '?' + routeWithQueryString.split('?')[1];
+        }
+        history.replaceState({}, routeString, routePrefix + routeNoSpaces);
+      }
+    }
+  });
+
+  /**
+   * Wire up behavior on page-load according to js- classnames.
+   */
+  var routeNoSpaces;
+  Drupal.behaviors.prodcatUiInit = {
+    attach: function(context) {
+      var $product = $('.js-product', context);
+      $(context).trigger('products.init-start');
+      $product.trigger('product.init');
+      $(context).trigger('products.init-finish');
+    }
+  };
+})(jQuery, window.generic = window.generic || {});

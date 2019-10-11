@@ -1,0 +1,11 @@
+Drupal.behaviors.whosOnChat = {
+  attach: function(context) {
+    if (typeof sWOTrackPage == 'function') sWOTrackPage();
+
+    $('.js-whoson-chat-link').on('click', function(event) {
+        event.preventDefault();
+        $('#wo_online_image').trigger('click');
+    });
+
+  }
+}

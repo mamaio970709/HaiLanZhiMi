@@ -1,0 +1,16 @@
+/**
+    SITEWIDE coremetrics overrides can go here. If something is required at an INSTANCE level, changes should be done similarly to sites/clinique/na/js/pc/site/endeca/instances/foundation_finder/option/coremetrics.js
+
+**/
+
+
+site.endeca.coremetrics = jQuery.extend( true, {}, generic.endeca.coremetrics, {
+    category_id: "search",
+    page_id: "Search Results",
+    
+    dimensionNameMap: {
+        "Skin Type" : "Typ",
+        "Skin Tone" : "Ton"
+    }
+    
+});

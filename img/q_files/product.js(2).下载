@@ -1,0 +1,71 @@
+site.endeca.result.product = jQuery.extend( true, {}, generic.endeca.result.product, {
+
+    displayResult: function( args ) {
+        this.setupReviewData();
+        this.setupBrandData();
+
+        var isSized = this.resultData.sized;
+        var isShaded = this.resultData.shaded;
+
+        // product fieldname
+        var fieldName = 'SHADENAME';
+        if (isSized) {
+          fieldName = 'PRODUCT_SIZE';
+        }
+
+        // sku prices for product
+        this.resultData.lowest_price = this.resultData.skus[0].PRICE;
+        this.resultData.lowest_sku_price = this.resultData.skus[0].formattedPrice;
+
+        // defaultSku
+        this.resultData.defaultSku = _.find(this.resultData.skus, { 'DEFAULT_SKU': 1 }) || this.resultData.skus[0];
+
+        // sku level formatting
+        for (i = 0, j < this.resultData.skus.length; i < j; i++) {
+          if (_.isUndefined(this.resultData.skus[i])) {
+            continue;
+          }
+
+          this.resultData.skus[i].shadeMenuLabel = this.resultData.skus[i][fieldName];
+          this.resultData.skus[i].isShoppable = this.resultData.skus[i].shoppable || 0;
+
+          // check to see if other skus have a lower price
+          if (this.resultData.skus[i].PRICE < this.resultData.lowest_price) {
+            this.resultData.lowest_price = this.resultData.skus[i].PRICE;
+            this.resultData.lowest_sku_price = this.resultData.skus[i].formattedPrice;
+          }
+        }
+
+        // set defaultSku images to arrays
+        this.resultData.defaultSku.MEDIUM_IMAGE = $.makeArray(this.resultData.defaultSku.MEDIUM_IMAGE);
+        this.resultData.defaultSku.LARGE_IMAGE = $.makeArray(this.resultData.defaultSku.LARGE_IMAGE);
+
+        // medium image from default sku
+        this.resultData.MEDIUM_IMAGE = this.resultData.defaultSku.MEDIUM_IMAGE;
+        // set large image that QS will load
+        this.resultData.LARGE_IMAGE = this.resultData.defaultSku.LARGE_IMAGE;
+
+        // provides sku_count for shaded product display
+        if (this.resultData.skus.length > 1 && isShaded) {
+          this.resultData.shaded_sku_count = this.resultData.skus.length;
+        }
+
+        // provides field for single shaded product display
+        if (this.resultData.skus.length === 1 && isShaded) {
+          this.resultData.single_shade = true;
+        }
+
+        // provides a sizes_count for display
+        if (this.resultData.skus.length > 1 && isSized) {
+          this.resultData.sizes_count = this.resultData.skus.length;
+        }
+
+        // Might need additional conditionals but will leave here for now.
+        if (this.resultData.sku_as_product) {
+          this.resultData.sku_as_product = true;
+        }
+
+        this._super( args );
+    }
+
+});

@@ -1,0 +1,157 @@
+/**
+ * Generic expander functionality
+ * case for basic expanding menu/ul
+ *
+ * Expanding Menu Usage / example markup:
+ *
+ *  <ul class="collapsible-menu">
+ *    <li class="collapsible-menu__parent">
+ *      <h3 class="collapsible-menu-trigger js-collapsible-menu-trigger">Parent Header</h3>
+ *      <div class="collapsible-sub-menu">
+ *        <ul class="">
+ *          <li class=""><a class="" href="#">Link 1</a></li>
+ *          <li class=""><a class="" href="#">Link 2</a></li>
+ *          <li class=""><a class="" href="#">Link 3</a></li>
+ *        </ul>
+ *      </div>
+ *    </li>
+ *  </ul>
+ *
+ * static link variant inside menu
+ *
+ *  <ul class="collapsible-menu cs-menu"><li>
+ *  		<h3 class="collapsible-menu__static cs-menu__static"><a href="/customer-service-contact-us">Contact Us</a></h3>
+ *  	</li>
+ *  </ul>
+ *
+ * Styles applied:
+ * .collapsible-menu__parent - plus when closed, minus when open
+ * .collapsible-sub-menu - closed by default
+ * additional BEM classes can be added for styling
+ *
+ *
+ * Expanding Mobile Block Usage / example markup:
+ *  <section class="content-container collapsible-block">
+ *    <a class="collapsible-block__anchor" name="cs-orders-section1" id="cs-orders-section4"></a>
+ *
+ *    <header class="collapsible-block__header clearfix">
+ *      <h4 class="collapsible-block__title collapsible-block__title--pc mobile-hidden">Order Cancellations</h4>
+ *      <div class="collapsible-block__title collapsible-block__title--mobile pc-hidden js-animating-block-trigger">
+ *        <span>Order Cancellations</span>
+ *        <i class="collapsible-block__icon"></i>
+ *      </div>
+ *    </header>
+ *
+ *    <div class="collapsible-block__content">
+ *      <div class="clearfix"></div>
+ *      <div class="collapsible-block__content-tout clearfix">
+ *        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non gravida quam. Ut sed ultricies neque. Quisque pulvinar turpis vel magna iaculis vestibulum. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec posuere interdum purus, quis porttitor dolor porta ac.
+ *      </div>
+ *
+ *    </div>
+ *  </section>
+ */
+
+ (function($){
+
+  var animationTime = 400;
+
+  /**
+   * Basic collapsible-menu behavior. Used in custom markup.
+   */
+  Drupal.behaviors.collapsibleMenu = {
+    attach: function(context) {
+      $('.js-collapsible-menu-trigger', context).on('click', function() {
+        var $parentGrid = $(this).closest('.js-grid');
+        $(this).closest('.collapsible-menu__parent').toggleClass('collapsible-menu__parent--expanded');
+        // if we are inside a grid, recalculate heights on click
+        if ($parentGrid.length) {
+          var $items = $parentGrid.find('.js-grid-item');
+          var colCountData = $parentGrid.data('grid-items-per-row');
+          site.util.grids.equalHeightsRows($items, colCountData);
+        }
+      });
+    }
+  };
+
+
+  /**
+   * Basic collapsible-block behavior.
+   */
+  Drupal.behaviors.animatingContentBlocks = {
+    init: function(context) {
+      var $block = $('.js-animating-block', context);
+      context = context.currentTarget || context;
+      var animation = false;
+
+      function updateDisplay($module) {
+        var $content = $module.find('.js-animating-content');
+        // Reject the function call
+        if (animation) {
+          clearTimeout(animation);
+        }
+        // Open
+        if ($module.hasClass('active')) {
+          $content.addClass('animating');
+        } else {
+          // Close
+          $content.removeClass('done');
+          setTimeout(function() {
+            $content.removeClass('animating');
+          }, 1);
+        }
+        setAnimationTimeout($module, $content);
+        function setAnimationTimeout($module, $content) {
+          setTimeout(function() {
+            animationDone($module, $content);
+          }, animationTime);
+        }
+        function animationDone($module, $content) {
+          if ($content.hasClass('animating')) {
+            // Remove content overflow
+            $content.addClass('done');
+            $module.find('.slick-initialized').slick('setPosition');
+          }
+          $(document).trigger('animations.waypointsRefresh');
+          $(document).trigger('rellax.refresh');
+        }
+      }
+
+      $block.each(function() {
+        var $self = $(this);
+        var $trigger = $self.find('.js-animating-block-trigger');
+
+        var $content = $self.find('.js-animating-content');
+        $content.addClass('animate');
+
+        if ($self.hasClass('js-animating-block--active')) {
+          $self.addClass('active');
+          updateDisplay($self);
+        }
+
+        // default expansion
+        $trigger.off('click.collapsible').on('click.collapsible', function(event) {
+          event.preventDefault();
+          if ($self.hasClass('js-animating-block--active')) {
+            $self.removeClass('js-animating-block--active');
+          }
+          $self.toggleClass('active');
+          updateDisplay($self);
+        });
+
+        $self.off('animation.triggered').on('animation.triggered', function(event, enter) {
+          if ($self.hasClass('js-animating-block--active') && enter) {
+            $self.addClass('active');
+          }
+          updateDisplay($self);
+        });
+      });
+
+    },
+    attach: function(context) {
+      $(document).on('collapsibleBlock.refresh', $.proxy(this.init, this));
+      this.init(context);
+    }
+  };
+
+})(jQuery);

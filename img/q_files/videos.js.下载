@@ -1,0 +1,264 @@
+(function($, site) {
+  site.videos = {
+    isMobile: {
+      Android: function() {
+        return navigator.userAgent.match(/Android/i);
+      },
+      BlackBerry: function() {
+        return navigator.userAgent.match(/BlackBerry/i);
+      },
+      iOS: function() {
+        return navigator.userAgent.match(/iPhone|iPad|iPod/i);
+      },
+      Opera: function() {
+        return navigator.userAgent.match(/Opera Mini/i);
+      },
+      Windows: function() {
+        return navigator.userAgent.match(/IEMobile/i) || navigator.userAgent.match(/WPDesktop/i);
+      },
+      any: function() {
+        return this.Android() || this.BlackBerry() || this.iOS() || this.Opera() || this.Windows();
+      }
+    },
+
+    open: function(opts) {
+      var provider = !_.isEmpty(opts.provider) ? opts.provider : '';
+
+      if (provider == 'zentrick') {
+        this.openZentrick(opts);
+      } else if (provider === 'youtube' || provider === 'youku') {
+        this.openYouTube(opts);
+      } else if (provider == 'html5') {
+        this.openHTML5(opts);
+      } else {
+        console.log('Video provider not yet supported.');
+      }
+    },
+
+    openZentrick: function(opts) {
+      var publicationId = opts.zentrickId;
+      var context = !_.isEmpty(opts.context) ? opts.context : document;
+      if (!!site.isZentrickPlayerAPIReady && !_.isEmpty(publicationId)) {
+        var content = '<div class="js-content-block-video-placeholder zentrick-video"></div>';
+        var options = {
+          content: content,
+          height: 'auto',
+          width: '100%',
+          maxWidth: 1024,
+          maxHeight: 768,
+          className: 'colorbox--video',
+          onLoad: function() {
+            var _this = this;
+            _this.$cbox = $('#colorbox.colorbox--video', context);
+            // initially hide close button to get around wonky animation
+            $('#cboxClose', _this.$cbox).hide();
+          },
+          onComplete: function() {
+            var _this = this;
+            _this.$cbox = $('#colorbox.colorbox--video', context);
+
+            $.colorbox.resize();
+
+            // show close button once wonky animation ends
+            $('#cboxClose', _this.$cbox).show();
+          }
+        };
+
+        // Remove existing videos
+        $('.zentrick-video').remove();
+
+        // Create a new video container element
+        var id = 'p' + +new Date();
+        var $videoContainer = $('<div></div>').attr({
+          'class': 'hidden zentrick-video',
+          'id': id
+        });
+        $videoContainer
+          .append($('<div />').attr('class', 'embed-container').append($('<div />').attr('id', id + '-inner')))
+          .appendTo('body');
+
+        // Initialize the player
+        site.zentrickPlayer = new zentrick.Player(
+          id + '-inner',
+          publicationId,
+          { html5: 1 }
+        );
+
+        // Add our new video player to an overlay
+        options.content = '<div class="js-content-block-video-placeholder">' + $('#' + id).html() + '</div>';
+        options.fastIframe = false;
+
+        if (opts.openOverlay) {
+          generic.overlay.launch(options);
+        } else {
+          opts.$content.html(options.content);
+          opts.$content.trigger('video.loaded');
+        }
+      } else {
+        console.log('Zentrick not ready or missing publication id.');
+      }
+    },
+
+    addYoukuVideo: function(youkuId, iframeId) {
+      var youku_src = '//player.youku.com/embed/' + youkuId + '?autoplay=1';
+      var ifrm = document.createElement('IFRAME');
+      ifrm.setAttribute('src', youku_src);
+      ifrm.setAttribute('allowfullscreen', 'allowfullscreen');
+      ifrm.style.width = '100%';
+      ifrm.style.border = '0';
+      $('#' + iframeId).replaceWith(ifrm);
+    },
+
+    openYouTube: function(opts) {
+      var videoProvider = opts.provider;
+      var ytId = videoProvider === 'youtube' ? opts.youTubeId : opts.youkuId;
+      var iframeId = false;
+      var context = !_.isEmpty(opts.context) ? opts.context : document;
+      var content = '<div class="js-content-block-video-placeholder youtube-video"></div>';
+      function createVideoPlayerDiv($elem, i) {
+        $elem.removeClass('js-content-block-video-placeholder');
+        var id = $elem.attr('class') + '-' + i;
+        $elem
+          .parent()
+          .append('<div />')
+          .children('div')
+          .attr('id', id);
+        return id;
+      }
+
+      function addVideo(ytId) {
+      /*global YT */
+        new YT.Player(iframeId, {
+          height: '100%',
+          width: '100%',
+          videoId: ytId,
+          playerVars: {
+            autoplay: 1,
+            modestbranding: 0,
+            controls: 1,
+            showinfo: 0,
+            rel: 0,
+          },
+          events: {
+            'onReady': function(event) {
+            // Don't autoplay on any mobile device
+              if (!site.videos.isMobile.any()) {
+                event.target.playVideo();
+              }
+            },
+            'onStateChange': function() {
+            // stuff
+            }
+          }
+        });
+      }
+
+      var options = {
+        content: content,
+        height: 'auto',
+        width: '100%',
+        maxWidth: 1024,
+        maxHeight: 768,
+        className: 'colorbox--video',
+        onLoad: function() {
+          var _this = this;
+          _this.$cbox = $('#colorbox.colorbox--video', context);
+          // initially hide close button to get around wonky animation
+          $('#cboxClose', _this.$cbox).hide();
+        },
+        onComplete: function() {
+          var _this = this;
+          _this.$cbox = $('#colorbox.colorbox--video', context);
+
+          // Create a new div for the player to take over inside of the colorbox
+          iframeId = createVideoPlayerDiv($('.js-content-block-video-placeholder', _this.$cbox), Math.floor(+new Date() / 1000));
+
+          // Remove our empty container
+          $('.js-content-block-video-placeholder', _this.$cbox).remove();
+
+          // Instantiate the video
+          if (videoProvider === 'youtube') {
+            addVideo(ytId);
+          } else {
+            site.videos.addYoukuVideo(ytId, iframeId);
+          }
+
+          // add container to make video embed responsive
+          $('iframe', _this.$cbox).wrap('<div class="embed-container"></div>');
+
+          $.colorbox.resize();
+
+          // show close button once wonky animation ends
+          $('#cboxClose', _this.$cbox).show();
+        }
+      };
+
+      if (opts.openOverlay) {
+        generic.overlay.launch(options);
+      } else {
+        opts.$content.html(content);
+        iframeId = createVideoPlayerDiv($('.js-content-block-video-placeholder', opts.$content), Math.floor(+new Date() / 1000));
+        if (videoProvider === 'youtube') {
+          addVideo(ytId, iframeId);
+        } else {
+          site.videos.addYoukuVideo(ytId, iframeId);
+        }
+        opts.$content.trigger('video.loaded');
+      }
+
+      $(document).on('videos.pause', function(event) {
+        $('#' + iframeId).each(function() {
+          if ($(this).get(0).contentWindow) {
+            $(this).get(0).contentWindow.postMessage('{"event":"command","func":"' + 'pauseVideo' + '","args":""}', '*');
+          }
+        });
+      });
+    },
+
+    openHTML5: function(opts) {
+      var content = opts.content;
+      var context = !_.isEmpty(opts.context) ? opts.context : document;
+      var options = {
+        content: content,
+        height: 'auto',
+        width: '100%',
+        maxWidth: 1024,
+        maxHeight: 768,
+        className: 'colorbox--video',
+        onLoad: function() {
+          var _this = this;
+          _this.$cbox = $('#colorbox.colorbox--video', context);
+          // initially hide close button to get around wonky animation
+          $('#cboxClose', _this.$cbox).hide();
+        },
+        onComplete: function() {
+          var _this = this;
+          _this.$cbox = $('#colorbox.colorbox--video', context);
+
+          // add container to make video embed responsive
+          $('video', _this.$cbox).wrap('<div class="embed-container"></div>');
+
+          $.colorbox.resize();
+
+          // show close button once wonky animation ends
+          $('#cboxClose', _this.$cbox).show();
+
+          $('video', _this.$cbox).get(0).play();
+        }
+      };
+      if (opts.openOverlay) {
+        generic.overlay.launch(options);
+      } else {
+        opts.$content.html(opts.content);
+        opts.$content.find('video').length ? opts.$content.find('video').get(0).play() : false;
+        opts.$content.trigger('video.loaded');
+      }
+
+      $(document).on('videos.pause', function(event) {
+        $('video').each(function() {
+          $(this).get(0).pause();
+        });
+      });
+    }
+  };
+})(jQuery, site);

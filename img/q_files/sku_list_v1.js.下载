@@ -1,0 +1,45 @@
+var prodcat = prodcat || {};
+prodcat.data = prodcat.data || {};
+var site = site || {};
+
+(function($) {
+  Drupal.behaviors.skuList = {
+    attach: function(context) {
+      var $products = $('.js-product', context);
+      $products.each(function() {
+        var $product = $(this);
+        var $skuList = $('.js-sku-list', $product);
+        if ($skuList.length) {
+          var $item = $('.js-sku-list__button', $skuList);
+          // var skuBaseId = $product.data('sku-base-id');
+          // $(this).trigger('product.skuList', skuBaseId);
+          $item.once().click(function(event) {
+            event.preventDefault();
+            var skuBaseId = $(this).data('sku-base-id');
+            $product.trigger('product.skuSelect', skuBaseId);
+          });
+        }
+      });
+    }
+  };
+
+  $(document).on('product.quickshop.launch.overlay product.quickshop.launch.inline', function(event, newContext) {
+    Drupal.behaviors.skuList.attach(newContext, Drupal.settings);
+  });
+
+  // Likewise, whenever skuSelect is fired on a product, update the menu:
+  $(document).on('product.skuSelect product.skuList', '.js-product', function(event, skuBaseId) {
+    if (!$('.js-sku-list', this).length) {
+      return;
+    }
+    //console.log('product.skuList');
+    //console.log(skuBaseId);
+    var $skuListItems = $('.js-sku-list__button', this);
+    $skuListItems.removeClass('button--active');
+    $skuListItems.filter('[data-sku-base-id=' + skuBaseId + ']').addClass('button--active');
+    var skuData = prodcat.data.getSku(skuBaseId);
+    if (skuData !== null) {
+      site.showEngraving(skuData);
+    }
+  });
+})(jQuery);

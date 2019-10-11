@@ -1,0 +1,36 @@
+generic.endeca.results.recentsearches = {
+    initialize: function( args ) {
+        this.searchTerm = null;
+        this._super(args);
+    },
+    
+    displayResults: function( args ) {
+        this.setupRecentSearches();
+        this._super({ templatePath: "/templates/endeca/recent-search.tmpl" });
+        this.displayResultNodes();
+    },
+    
+    setupRecentSearches: function() {
+        var encodedSearchTerm = encodeURIComponent(this.searchTerm);
+        var recentSearchesCookie = jQuery.cookie('researches');
+        var recentSearches = recentSearchesCookie ? String( recentSearchesCookie ).split(":::") : [];
+        
+        if ( this.searchTerm ) { recentSearches.unshift( encodedSearchTerm ); }
+        recentSearches = site.endeca.helpers.array.unique(recentSearches).splice( 0, this.configuration.maximumRecentSearches );
+        
+        if ( recentSearches && recentSearches.length ) {
+            jQuery.cookie( 'researches', recentSearches.join(":::") );
+            
+            for ( var i = 0; i < recentSearches.length; i++ ) {
+    		    this.resultData.push({
+                    searchTerm: decodeURIComponent(recentSearches[i]).replace(/\+/, " "),
+                    "Selection Link": "Ntt=" + recentSearches[i],
+                    "Display Link": "?search=" + recentSearches[i]
+                });
+            }
+        }
+    }
+
+};
+
+site.endeca.results.recentsearches = generic.endeca.results.recentsearches;

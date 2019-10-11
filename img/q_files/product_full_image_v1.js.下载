@@ -1,0 +1,180 @@
+(function($, site, prodcat) {
+  /**
+   * Let product.skuSelect handle initiation
+   */
+  $(document).on('product.init', '.js-product', function() {
+    var $self = $(this);
+    var $imageContainer = $('.js-product-full__image', $self);
+    if ($imageContainer.length) {
+      // Drupal.behaviors.productFullImageV1.attach($(this));
+      $(document).trigger('product.fullImage.init', [$self]);
+    }
+  });
+
+  /**
+   *
+   */
+  $(document).on('product.skuSelect', '.js-product', function(event, skuBaseId) {
+    skuBaseId = parseInt(skuBaseId);
+
+    var $product = $(this);
+    var $imageContainer = $('.js-product-full__image', $product);
+    if (!$imageContainer.length) {
+      return;
+    }
+
+    var prod = $product ? prodcat.data.getProduct($product.data('product-id')) : null;
+    var sku = prodcat.data.getSku(skuBaseId);
+
+    // check against current sku | avoid rendering twice
+    var currentSku = parseInt($imageContainer.attr('data-sku-base-id'));
+    if (skuBaseId === currentSku && !$imageContainer.data('imageContainerLoaded')) {
+      $imageContainer.data('imageContainerLoaded', true);
+      return;
+    }
+
+    // Parse the SKU otherwise parse the defaultSku of the product or just the product image
+    var data = sku ? sku : (prod.defaultSku ? prod.defaultSku : prod);
+    var $video, video_image, yt, ytId;
+
+    // Check for video
+    var $videoContainer = $('.js-spp-carousel__slide--video', $imageContainer);
+
+    var hasVideo = $videoContainer.length ? 1 : 0;
+    if (hasVideo) {
+      $video = $('.js-product-video', $videoContainer);
+      video_image = $('.js-video_image', $video).attr('src');
+      yt = !!$video.attr('data-video-provider');
+      ytId = $video.attr('data-youtube-id');
+      // additional support will be needed for html5 and zentrick
+      // provider-htmlfive
+      // provider-zentrick
+      // id
+      // html
+
+      data['video'] = {
+        'video_image': video_image,
+        'provider-youtube': yt,
+        'youtube_id': ytId
+      };
+    }
+    $imageContainer.fadeTo('slow', 0, 'linear', function() {
+      /* ------- Sku Images ------- */
+      var product_full_image = site.template.get({
+        name: 'product_full_image',
+        data: data
+      });
+
+      $(this).html($(product_full_image).html());
+
+      // Reattach video
+      if (hasVideo) {
+        $(document).trigger('youtubeIframeAPI.loaded');
+      }
+
+      // Refresh the slick slider if there is one
+      $(document).trigger('product.fullImage.init', [$product]);
+
+      $(document).trigger('productflag.init', $imageContainer);
+    }).fadeTo('fast', 1, 'linear');
+  });
+
+  /**
+   * Main handler for image carousels
+   */
+  $(document).on('product.fullImage.init', function(e, context) {
+    context = typeof context !== 'undefined' ? context : document;
+
+    $('.product-full__image', context).each(function() {
+      var $container = $(this);
+
+      var $sppImages = $('.product-full__image-carousel', $container);
+      var $carousel = $('.js-spp-carousel', $sppImages);
+
+      var arrowsDiv = $('.carousel-controls', $container);
+      var dotsDiv = $('.carousel-dots', $container);
+      var sppSlide = '.js-spp-carousel__slide';
+
+      // case for custom slides count and dots for mobile
+      var settings = {
+        slide: sppSlide,
+        infinite: true,
+        slidesToShow: 1,
+        slidesToScroll: 1,
+        arrows: false,
+        dots: true,
+        //appendArrows: arrowsDiv,
+        appendDots: dotsDiv
+      };
+
+      var _init_default_carousel = function() {
+        var $carousels = $carousel.not('.slick-initialized');
+        if ($carousels.length === 0) {
+          return;
+        }
+
+        $carousel.on('init', function(event, slick) {
+          var $videoSlide = $carousel.find('.js-spp-carousel__slide--video:not(".slick-cloned")');
+          var videoSlideIndex = $videoSlide.data('slick-index');
+          if ($videoSlide.length) {
+            dotsDiv.find('.slick-dots li').eq(videoSlideIndex).addClass('slick-dot-video');
+          }
+        });
+
+        // Init this carousel with our settings
+        // $carousel.not('.slick-initialized').slick(settings);
+        $carousels.slick(settings);
+
+        // Update the thumbnails to highlight the correct thumbnail
+        $carousel.on('afterChange', function(event, slick, currentSlide) {
+          var $sppThumbnails = $('.product-full__image-thumbnails', slick.$slider.parents('.product-full__image'));
+          var $thumbWrapper = $('.product-full__carousel__thumbnail', $sppThumbnails);
+          var $flagAndSocialElements = $('.product-full__social, .product-flag__badge', '.product-full');
+          // Remove other active states
+          $thumbWrapper.removeClass('active');
+
+          // Add the active state to this item
+          $thumbWrapper.eq(currentSlide).addClass('active');
+
+          // hide the product flag and share element when video slide is in view
+          if ($(slick.$slides.get(currentSlide)).hasClass('js-spp-carousel__slide--video')) {
+            $flagAndSocialElements.hide();
+          } else {
+            $flagAndSocialElements.show();
+          }
+        });
+      };
+
+      _init_default_carousel();
+
+      // thumbnails
+      var $sppThumbnails = $('.product-full__image-thumbnails', $container);
+      $sppThumbnails.each(function() {
+        var $thisFormatter = $(this);
+        var $thumbWrapper = $('.product-full__carousel__thumbnail', $thisFormatter);
+        $thumbWrapper.first().addClass('active'); //Set the first as active on load
+        var $thumbnailImage = $('.product-full__carousel__thumbnail-img', $thumbWrapper);
+        $thumbnailImage.once().on('click', function() {
+          var currentSlide = $thumbWrapper.index($(this).parents($thumbWrapper));
+          $carousel.slick('slickGoTo', currentSlide);
+          $thumbWrapper.removeClass('active'); //Remove other active states
+          $thumbWrapper.eq(currentSlide).addClass('active'); //Add the active state to this item
+        });
+      });
+
+      // $(document).on('quickshop.loaded', function() {
+      //   $carousel.slick('setPosition');
+      // });
+    });
+  });
+
+  // Drupal.behaviors.productFullImageV1 = {
+  //   attach: function(context, settings) {
+  //     // $(document).trigger('product.fullImage.init', context);
+  //   }
+  // };
+})(
+  jQuery,
+  window.site || {},
+  window.prodcat || {}
+);

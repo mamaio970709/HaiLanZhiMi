@@ -1,0 +1,31 @@
+var site = site || {};
+(function($) {
+  Drupal.behaviors.qrgenerate = {
+    attach: function(context, settings) {
+      var enableWechat = Drupal.settings.common.enable_wechat;
+      if (enableWechat) {
+        $('body').append("<div class='qrWrapper'><div class='qrcodeTableHidden' name='qrcodeTableHidden' style='display:none;'><div class='qrcodePreLoad'></div></div></div>");
+        var siteHref = window.location.origin;
+        var qrtext = siteHref + window.location.pathname;
+        var qrcode = new QRCode(
+          $('.qrcodeTableHidden .qrcodePreLoad')[0], {width: 180, height: 180, correctLevel: 1}
+        );
+        qrcode.makeCode(qrtext);
+      }
+    }
+  };
+
+  $(document).on('click', '.js-share-wechat', function(event) {
+    event.preventDefault();
+    var qrcodeHtml = $('body .qrcodeTableHidden .qrcodePreLoad').html();
+    var qrTitle = site.translations.product.share_wechat_text ? '<h3>' + site.translations.product.share_wechat_text + '</h3>' : ' ';
+    $(this).next('.js-qrcontent').empty().append(qrTitle + qrcodeHtml).slideToggle();
+  });
+
+  $(document).on('click', function(e) {
+    var target = e.target;
+    if (!$(target).closest('a').hasClass('js-share-wechat')) {
+      $('.js-qrcontent').hide();
+    }
+  });
+})(jQuery);

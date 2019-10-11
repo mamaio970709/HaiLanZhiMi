@@ -1,0 +1,15 @@
+(function($){
+
+Drupal.behaviors.headerMenuSearch = {
+  attach: function(context) {
+    var that = this;
+    that.$trigger = $('.js-nav-category-search-trigger');
+
+    that.$trigger.off('click').on('click', function(e) {
+      e.preventDefault();
+      $(document).trigger('search:toggle');
+    });
+  }
+};
+
+})(jQuery);

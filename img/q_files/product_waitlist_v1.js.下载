@@ -1,0 +1,144 @@
+/* global prodcat */
+(function($) {
+  /**
+    * Event listener to initalize the waitlist button when a product is sold out or coming soon.
+    * Event call is coming from js/site/product_ui.js when a product is initalized or a sku is selected.
+    * Passes product data to the init method of productWaitlistV1.
+  */
+  $(document).on('product.waitlist.init', function(event, data) {
+    //console.log('product.waitlist.init');
+    Drupal.behaviors.productWaitlistV1.init(data);
+  });
+
+  /**
+   * Event listener to reset or hide the waitlist button when a product is available.
+   * Passes product data to the reset method of productWaitlistV1.
+   */
+  $(document).on('product.waitlist.reset', function(event, data) {
+    Drupal.behaviors.productWaitlistV1.reset(data);
+  });
+
+  Drupal.behaviors.productWaitlistV1 = {
+    /**
+     * Init method that handles the functionality for the notify button on a product.
+     * Before initialization, does an additional check for sold out products to make sure
+     *   life of product basic reorder is set.
+     * If everything checks out, the waitlist button is shown and the overlay event trigger is added.
+     * The show method is used to display the notify button and hide the add to bag button.
+     * The product SKU_BASE_ID is also added to the notify button.
+     * @param {Object} data: product data
+     * @returns {void}
+     */
+    init: function(data) {
+      //console.log('-->');
+      //console.log(data);
+      if (!data) {
+        return;
+      }
+
+      var that = this;
+      var $container = $(this.classes.container).filter('[data-product-id=' + data.PRODUCT_ID + ']');
+      var $waitlistBtns = $(this.classes.waitlistBtn, $container);
+
+      $waitlistBtns.each(function(index, btn) {
+        $(btn).attr('data-sku-base-id', data.SKU_BASE_ID);
+
+        if ($(btn).hasClass(that.classes.enabled)) {
+          return null;
+        }
+
+        that.show($container);
+      });
+    },
+
+    /**
+     * Reset method handles hidding the notify button and re-displaying add to bag button if it was hidden.
+     * Primarily used for multi-sku products.
+     * Uses the hide method to handle the re-displaying of add to bag and hiding notify me.
+     * Won't call the hide method unless notify button is displayed.
+     * @param {Object} data: product data
+     * @returns {void}
+     */
+    reset: function(data) {
+      if (!data) {
+        return;
+      }
+      var $container = $(this.classes.container).filter('[data-product-id=' + data.PRODUCT_ID + ']');
+      var $waitlistBtnContainer = $(this.classes.waitlistBtn, $container);
+      if (!$waitlistBtnContainer.hasClass(this.classes.enabled)) {
+        return;
+      }
+      this.hide($container, $waitlistBtnContainer);
+    },
+
+    /**
+     * Method to handle showing and enabling of the notify button and the hidding of add to bag.
+     * @param {Object} $container: jQuery container
+     * @returns {void}
+     */
+    show: function($container) {
+      var $waitlistBtnContainer = $(this.classes.waitlistBtn, $container);
+      var $cartBtnContainer = $(this.classes.cartBtn, $container);
+
+      $cartBtnContainer.addClass(this.classes.hidden);
+      $waitlistBtnContainer.removeClass(this.classes.hidden);
+      $waitlistBtnContainer.addClass(this.classes.active);
+      $waitlistBtnContainer.addClass(this.classes.enabled);
+    },
+
+    /**
+     * Method to handle hiding and disabling of the notify button and showing of add to bag.
+     * @param {Object} $container: jQuery container
+     * @param {Object} $waitlistBtnContainer: jQuery container
+     * @returns {void}
+     */
+    hide: function($container, $waitlistBtnContainer) {
+      var $cartBtnContainer = $(this.classes.cartBtn, $container);
+
+      $cartBtnContainer.removeClass(this.classes.hidden);
+      $waitlistBtnContainer.addClass(this.classes.hidden);
+      $waitlistBtnContainer.removeClass(this.classes.active);
+      $waitlistBtnContainer.removeClass(this.classes.enabled);
+    },
+
+    /**
+      * Method to declare DOM classes used by waitlist.
+    */
+    classes: {
+      waitlistBtn: '.js-add-to-waitlist',
+      cartBtn: '.js-add-to-cart, .js-add-to-bag',
+      invStatus: '.js-inv-status-list',
+      container: '.js-product',
+      enabled: 'js-waitlist-enabled',
+      hidden: 'hidden',
+      active: 'active'
+    },
+
+    /**
+      * Status ids used by the waitlist; adjust accordingly.
+    */
+    statusIds: {
+      inventory: {
+        tempOOS: 2,
+        comingSoon: 3,
+        soldOut: 7
+      },
+      lifeOfProduct: {
+        basicReorder: 2
+      }
+    }
+  };
+
+  $(function() {
+    $(document).on('click', Drupal.behaviors.productWaitlistV1.classes.waitlistBtn, function(e) {
+      var skuBaseId = $(this).attr('data-sku-base-id');
+      var data = prodcat.data.getSku(skuBaseId);
+
+      e.preventDefault();
+
+      if (data) {
+        $(document).trigger('product.waitlist.overlay', data);
+      }
+    });
+  });
+})(jQuery);

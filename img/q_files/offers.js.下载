@@ -1,0 +1,42 @@
+var site = site || {};
+site.template = site.template || {};
+
+(function($) {
+
+Drupal.behaviors.offers = {
+  linkedBasedOffer: function() {
+    if ($.cookie('offer_info') == null || $.cookie('offer_info').length == 0) {
+      return;
+    }
+    var offer_code = $.cookie('offer_info').split(":")[1];
+    site.onLoadRpc.requests.push({
+      method: 'offer.linkedOfferState',
+      params: [offer_code],
+      onSuccess: function(data) {
+        var message = data.result.value.linked_offer.offer_message;
+        var template = offer_code;
+        var rendered = site.template.get({
+          name: template,
+          data: {message : message}
+        });
+        generic.overlay.launch({
+          content: rendered
+        });
+      },
+      onError: function(data) {}
+    });
+  },
+
+  attach: function(context, settings) {
+    if (this.attached) {
+      return;
+    }
+    this.attached = true;
+
+    this.linkedBasedOffer();
+  },
+
+  attached: false
+};
+
+})(jQuery);

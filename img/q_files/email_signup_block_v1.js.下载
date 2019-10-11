@@ -1,0 +1,169 @@
+var generic = generic || {};
+var site = site || {};
+(function($) {
+  site.emailSignup = {
+    templateContainer: $(),
+
+    initEmailSignup: function() {
+      var $emailContainerNodes = this.templateContainer;
+      if (!$emailContainerNodes.length) {
+        return null;
+      }
+      $emailContainerNodes.each(function() {
+        var $emailContainerNode = $(this);
+        var $emailForm = $emailContainerNode.is('form') ? $emailContainerNode : $('form', $emailContainerNode);
+        var $emailFields = $('.site-email-signup__fields', $emailContainerNode);
+        var $emailSuccess = $('.js-email-signup__success', $emailContainerNode);
+        var $emailLinkSubmit = $('.js-email-signup-link', $emailContainerNode);
+        var $emailSuccessMessage = $('.site-email-signup__email-message', $emailContainerNode);
+        var $smsSuccessMessage = $('.site-email-signup__sms-message', $emailContainerNode);
+        var $emailError = $('.js-email-signup__error', $emailContainerNode);
+        var $emailInput = $('input[name="PC_EMAIL_ADDRESS"]', $emailContainerNode);
+        var $smsInput = $('input[name="MOBILE_PHONE"]', $emailContainerNode);
+        var $languageIDInput = $('input[name="LANGUAGE_ID"]', $emailContainerNode);
+
+        if (Drupal.settings.common.has_onelink_trans) {
+          if (generic.cookie('LOCALE') === Drupal.settings.common.locate_one_link_translation) {
+            $languageIDInput.val(Drupal.settings.common.lang_id_one_link_translation);
+          }
+        }
+
+        // Submit Email form
+        $emailLinkSubmit.once().on('click', function() {
+          $emailForm.submit();
+        });
+
+        $emailForm.once('js-email-sms-signup').submit(function(submitEvt) {
+          submitEvt.preventDefault();
+          $emailSuccess.addClass('hidden');
+          $emailError.html('');
+          $emailInput.removeClass('error');
+
+          // Transform string into array of form elements
+          var params = {};
+          $.each($emailForm.serializeArray(), function(index, kv) {
+            params[kv.name] = kv.value.replace('undefined', '').replace('%40', '@');
+          });
+
+          params['_TOKEN'] = $.cookie('csrftoken');
+
+          // handle the sms_promotions checkbox - if its checked its being read as 'on' when serialized
+          // we need a boolean value
+          if ($emailContainerNode.find('input[name="SMS_PROMOTIONS"]').prop('checked')) {
+            params.SMS_PROMOTIONS = 1;
+          }
+
+          // handle the PROMOTIONS_PRIVACY checkbox
+          if ($emailContainerNode.find('input[name="PROMOTIONS_PRIVACY"]').prop('checked')) {
+            params.PROMOTIONS_PRIVACY = 1;
+          }
+
+          if ($.cookie('csrftoken')) {
+            params['_TOKEN'] = $.cookie('csrftoken');
+          }
+
+          // Send the data via a json rpc call
+          generic.jsonrpc.fetch({
+            method: 'rpc.form',
+            params: [params],
+            onSuccess: function(jsonRpcResponse) {
+              var response = jsonRpcResponse.getData();
+              var $emailSignupTitle = $('.js-site-email-signup-title');
+              var $emailSignupSubtitle = $('.js-site-email-signup-subtitle');
+              $emailFields.addClass('hidden');
+              if (!response.userinfo.sms_optin) {
+                $emailSuccess.html($emailSuccessMessage.val().replace('::email::', response.userinfo.display_email_address));
+              } else {
+                $emailSuccess.html($smsSuccessMessage.val().replace('::email::', response.userinfo.display_email_address).replace('::sms::', $smsInput.val()));
+              }
+              $emailSuccess.removeClass('hidden');
+              $emailSignupTitle.addClass('hidden');
+              $emailSignupSubtitle.addClass('hidden');
+            },
+            onFailure: function(jsonRpcResponse) {
+              var messages = jsonRpcResponse.getError().data.messages;
+              $emailError.empty();
+              $('input').removeClass('error');
+
+              var errorOrder = ['required.pc_email_address.email_sms_signup', 'invalid.pc_email_address.email_sms_signup', 'required_and.sms_promotions.mobile_phone.required_and.email_sms_signup', 'format.mobile_phone.email_sms_signup', 'min_max.mobile_phone.email_sms_signup', 'required_dependency.sms_promotions.mobile_phone.dependency.sms'];
+
+              messages.sort(function(a, b) {
+                return errorOrder.indexOf(a.key) - errorOrder.indexOf(b.key);
+              });
+
+              for (var i = 0; i < messages.length; i++) {
+                var myErr = messages[i];
+                if (myErr && myErr.key) {
+                  $emailError.removeClass('hidden');
+                  if (myErr.key === 'required.pc_email_address.email_sms_signup' ||
+                    myErr.key === 'invalid.pc_email_address.email_sms_signup') {
+                    $emailError.append('<li class="' + messages[i].key + '">' + messages[i].text + '</li>');
+                    $emailInput.addClass('error');
+                  }
+                  if (myErr.key === 'required_and.sms_promotions.mobile_phone.required_and.email_sms_signup' ||
+                    myErr.key === 'format.mobile_phone.email_sms_signup' ||
+                    myErr.key === 'min_max.mobile_phone.email_sms_signup' ||
+                    myErr.key === 'required_dependency.sms_promotions.mobile_phone.dependency.sms') {
+                    $emailError.append('<li class="' + messages[i].key + '">' + messages[i].text + '</li>');
+                    $smsInput.addClass('error');
+                  }
+                  if (myErr.key === 'required.promotions_privacy.email_sms_signup') {
+                    $emailError.append('<li class="' + messages[i].key + '">' + messages[i].text + '</li>');
+                  }
+                }
+              }
+            }
+          });
+        });
+      });
+    }
+  };
+
+  Drupal.behaviors.emailSignupFormV1 = {
+    attach: function(context) {
+      site.emailSignup.content = $('.site-footer-pc__column', context);
+      site.emailSignup.templateContainer = $('.js-email-sms-signup', context);
+      site.emailSignup.emailSubmit = $('.site-email-signup__submit', site.emailSignup.templateContainer);
+      site.emailSignup.formInputs = $('input[name="PC_EMAIL_ADDRESS"], input[name="MOBILE_PHONE"]', site.emailSignup.templateContainer);
+      site.emailSignup.emailAddress = $('input[name="PC_EMAIL_ADDRESS"]', site.emailSignup.templateContainer);
+      site.emailSignup.mobileNumberInput = $('input[name="MOBILE_PHONE"]', site.emailSignup.templateContainer);
+      site.emailSignup.emailSignupCopy = $('.js-site-email-signup__copy', site.emailSignup.templateContainer);
+      site.emailSignup.termsAndConditions = $('.js-terms-conditions', site.emailSignup.templateContainer);
+      site.emailSignup.initEmailSignup();
+
+      // Show email sign up copy
+      site.emailSignup.emailAddress.off('focus').on('focus', function(e) {
+        site.emailSignup.emailSignupCopy.slideDown(300, function() {
+          Drupal.behaviors.grids.equalHeights(site.emailSignup.content);
+        });
+        site.emailSignup.termsAndConditions.slideUp(300, function() {
+          Drupal.behaviors.grids.equalHeights(site.emailSignup.content);
+        });
+      });
+
+      // Show terms + conditions
+      site.emailSignup.mobileNumberInput.off('focus').on('focus', function(e) {
+        site.emailSignup.termsAndConditions.slideDown(300, function() {
+          Drupal.behaviors.grids.equalHeights(site.emailSignup.content);
+        });
+      });
+
+      // hide terms + conditions when clicked outside
+      $(document).click(function(hideEvt) {
+        if (!$(hideEvt.target).closest(site.emailSignup.templateContainer).length && !$(hideEvt.target).is(site.emailSignup.templateContainer)) {
+          if (site.emailSignup.termsAndConditions.is(':visible')) {
+            site.emailSignup.termsAndConditions.slideUp(300, function() {
+              Drupal.behaviors.grids.equalHeights(site.emailSignup.content);
+            });
+          }
+        }
+      });
+
+      site.emailSignup.formInputs.each(function() {
+        $(this).on('focus', function() {
+          site.emailSignup.emailSubmit.removeClass('hidden');
+        });
+      });
+    }
+  };
+})(jQuery);

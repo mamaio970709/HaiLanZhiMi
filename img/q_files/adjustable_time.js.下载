@@ -1,0 +1,148 @@
+(function($) {
+  /**
+   * Adjustable Time behavior.
+   */
+  Drupal.behaviors.adjustableTime = {
+    attach: function(context) {
+      window.signOutTimer = null;
+      window.sessionIdlePopupTimer = null;
+      window.sessionTimeoutCountDownTimer = null;
+
+      // When session is idle for below mentioned minutes, user is logged out. Value should be in minutes.
+
+      var signOutDuration = 15;
+
+      // Session time-out alert is displayed before the below mentioned seconds from the actual time-out. Value should be in seconds.
+      var sessionTimeoutRemainingTimeInSec = 20;
+
+      // Convert seconds to minutes
+      var sessionTimeoutRemainingTimeInMin = sessionTimeoutRemainingTimeInSec / 60;
+
+      var settings = Drupal.settings.common || {};
+      var enable_session_timeout_popup = settings.enable_session_timeout_popup;
+
+      function getCookieValue(a, b) {
+        b = document.cookie.match('(^|;)\\s*' + a + '\\s*=\\s*([^;]+)');
+        return b ? b.pop() : '';
+      }
+
+      // Log out user after 15 minutes on secure(https://) pages
+      if ((document.location.protocol === 'https:') && (!getCookieValue('debug_noTimeout'))) {
+        clearSignOutTimer = function() {
+          if (window.signOutTimer !== null) {
+            window.clearTimeout(window.signOutTimer);
+          }
+        };
+
+        setSignOutTimer = function() {
+          window.signOutTimer = window.setTimeout(function() {
+            generic.overlay.hide();
+            clearSessionCountDownTimer();
+            signOutNow();
+          }, signOutDuration * 60 * 1000);
+          if (enable_session_timeout_popup) {
+            sessionIdlePopup();
+          }
+        };
+
+        sessionIdlePopup = function() {
+          if (window.sessionIdlePopupTimer !== null) window.clearTimeout(window.sessionIdlePopupTimer);
+          window.sessionIdlePopupTimer = window.setTimeout(function() {
+
+            // User needs to be reminded of session time-out only if he is logged-in
+            if (site.userInfoCookie.getValue('signed_in') - 0 === 0) return false;
+
+            var $sessionIdlePopUpContent = $($('script.inline-template[path="adjustable_time"]').html());
+            var $sessionIdlePopUp = $("<div/>").append($sessionIdlePopUpContent).addClass('js-session-idle-popup-tab-order');
+
+            // Show idle session alert pop-up
+            generic.overlay.launch({
+              content: $sessionIdlePopUp,
+              includeBackground: true,
+              overlayClose: false,
+              width: "580px",
+              height: "220px",
+              closeButton: true,
+            });
+
+            $('#cboxOverlay').addClass('pre_chat_overlay_bg');
+            $('#cboxContent').attr('tabindex', '0').focus();
+
+            $.fn.escape = function(callback) {
+              return this.each(function() {
+                $(document).on("keydown", this, function(e) {
+                  var keycode = ((typeof e.keyCode != 'undefined' && e.keyCode) ? e.keyCode : e.which);
+                  if (keycode === 32) {
+                    callback.call(this, e);
+                  };
+                });
+              });
+            };
+
+            $('.js-session-idle-popup-tab-order').escape(function() {
+              $('.js-session-idle-popup-logout').trigger('click');
+            });
+
+            // Lets show countdown for the user to choose his options in sign-out alert pop-up
+            clearSessionCountDownTimer();
+
+            var sessionTimeoutCountDownCntr = 0,
+              $sessionTimeoutCounter = $('.js-session-timeout-count-down', $('#colorbox'));
+
+            $sessionTimeoutCounter.text(sessionTimeoutRemainingTimeInSec);
+            window.sessionTimeoutCountDownTimer = window.setInterval(function() {
+              sessionTimeoutCountDownCntr++;
+              var sessionTimeoutString = sessionTimeoutRemainingTimeInSec - sessionTimeoutCountDownCntr;
+              if (sessionTimeoutString > -1) {
+                $sessionTimeoutCounter.text(sessionTimeoutString);
+              }
+            }, 1000);
+          }, (signOutDuration - sessionTimeoutRemainingTimeInMin) * 60 * 1000);
+        };
+
+        var clearSessionCountDownTimer = function() {
+          if (window.sessionTimeoutCountDownTimer !== null) window.clearInterval(window.sessionTimeoutCountDownTimer);
+        };
+
+        // Sign-out destination URL
+        signOutNow = function() {
+          if (site.userInfoCookie.getValue('signed_in') - 0 === 0) return false;
+          document.location.href = '/account/signin.tmpl?_SUBMIT=signout&timeout=1';
+        };
+
+        sessionExtend = function() {
+          generic.overlay.hide();
+          clearSessionCountDownTimer();
+          clearSignOutTimer();
+          setSignOutTimer();
+
+          // RPC Sent to Retain Session
+          generic.jsonrpc.fetch({
+            method: 'session.get',
+            onSuccess: function() {
+              // We have extended the session
+            }
+          });
+        };
+
+        // On page load clear any time-outs and start ticking a new one
+        clearSignOutTimer();
+        setSignOutTimer();
+
+        // Append the session time-out alert pop-up box
+        $(document).ready(function() {
+          var $body = $('body');
+
+          // "Logout" CTA from session time-out alert pop-up
+          $body.on('click', '.js-session-idle-popup-logout', function() {
+            signOutNow();
+          });
+          // "Stay connected" CTA from session time-out alert pop-up
+          $body.on('click', '.js-session-idle-popup-retain-session', function() {
+            sessionExtend();
+          });
+        });
+      }
+    }
+  };
+})(jQuery);

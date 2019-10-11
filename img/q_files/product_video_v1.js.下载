@@ -1,0 +1,68 @@
+var site = site || {};
+
+(function($, Drupal) {
+  var productVideoBehavior = {
+    setup: function($modules, context) {
+      $modules.each(function() {
+        init($(this));
+      });
+
+      function init($module) {
+        var $play = $('.js-play', $module);
+        var provider = $module.data('video-provider');
+        var isYoutube = provider === 'youtube';
+        var isZentrick = provider === 'zentrick';
+        var isHTML5 = provider === 'html5';
+
+        $play.once().click(function(event) {
+          event.preventDefault();
+
+          var opts = {
+            context: context,
+            provider: provider,
+            openOverlay: $play.hasClass('js-play--overlay')
+          };
+
+          if (!!isYoutube) {
+            opts.youTubeId = $module.data('youtube-id');
+          } else if (!!isZentrick) {
+            opts.zentrickId = $module.data('zentrick-id');
+          } else if (!!isHTML5) {
+            opts.content = $module.find('video').wrap('<div />').parent().html();
+          }
+
+          site.videos.open(opts);
+
+          return false;
+        });
+      }
+    }
+  };
+
+  /**
+   * We initialize each type of video separately because we don't know if/when their respective libraries are loaded
+   */
+
+  $(document).on('youtubeIframeAPI.loaded', function() {
+    var $elements = $('.js-product-video').filter("[data-video-provider='youtube']");
+    if ($elements.length) {
+      productVideoBehavior.setup($elements, document);
+    }
+  });
+
+  $(document).on('zentrick:loaded', function() {
+    var $elements = $('.js-product-video').filter("[data-video-provider='zentrick']");
+    if ($elements.length) {
+      productVideoBehavior.setup($elements, document);
+    }
+  });
+
+  Drupal.behaviors.productVideoV1 = {
+    attach: function(context, settings) {
+      var $elements = $('.js-product-video').filter("[data-video-provider='html5']");
+      if ($elements.length) {
+        productVideoBehavior.setup($elements, context);
+      }
+    }
+  };
+})(jQuery, Drupal);

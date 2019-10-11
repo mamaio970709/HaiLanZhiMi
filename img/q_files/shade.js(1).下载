@@ -1,0 +1,31 @@
+site.endeca.result.shade = jQuery.extend( true, {}, generic.endeca.result.shade, {
+
+    drawSwatch: function( args ) {
+        if (!this.resultData.HEX_VALUE_STRING || this.resultData.HEX_VALUE_STRING.length < 1) {
+            return;
+        }
+        
+        var swatchContainerNode = this.node.find('.search-swatch-container');
+        //var swatchWidth = swatchContainerNode.css('width');
+        //swatchWidth = parseInt( swatchWidth.replace('px', '') );
+                
+        var hexVals = this.resultData.HEX_VALUE_STRING.split(',');
+        //var swatchShadeWidth = Math.ceil(swatchWidth/hexVals.length);
+        
+        for (var i=0; i<hexVals.length; i++) {
+            var d = jQuery("<div/>");
+            d.css({ 
+                //width: swatchShadeWidth + "px",
+                'background-color': hexVals[i] 
+            });
+            if ( i == 0 ) { d.addClass('first'); }
+            if ( i == hexVals.length-1 ) { d.addClass('last') }
+            if ( hexVals.length == 1 ) { d.addClass('single') }
+            
+            swatchContainerNode.append(d);
+        }
+        
+        swatchContainerNode.css('width', 'auto');  
+    }
+    
+});

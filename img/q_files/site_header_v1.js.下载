@@ -1,0 +1,342 @@
+var generic = generic || {};
+var site = site || {};
+site.userInfoCookie = site.userInfoCookie || {};
+site.userInfoCookie.getValue = site.userInfoCookie.getValue || function() {
+  return '';
+};
+
+(function($) {
+  'use strict';
+
+  Drupal.behaviors.siteHeaderV1 = {
+    elems: {},
+    active: false,
+    $activeCategory: false,
+    menuAnimationInterval: false,
+    options: {
+      enableHover: true,
+      // Our buffer for when we mouseenter between overlay / menu
+      // This is for a smoother user experience
+      overlayHoverCloseDelay: 400
+    },
+    attach: function(context) {
+      var self = this;
+      var $body = $('body', context);
+      var $hamburger = $('.js-nav-launch', context);
+      var $header = $('.site-header', context);
+      var $pageContent = $('.site-content', context);
+      var $headerMain = $('.site-header__main', context);
+      var $mainMenu = $('.site-header__menu', context);
+      var $menuHeadersMobile = $('.menu__item--category', context);
+      var $menuItemMobile = $('.site-header__menu-list .menu__item--lvl-1', context);
+      var $isOnePageCheckout = $('.js-checkout-single-page', context).length;
+      var $thisContent = $('.js-gnav-utit-content-signup');
+      var loyaltyMember = site.userInfoCookie.getValue('is_loyalty_member');
+      var loyaltyLevelName = site.userInfoCookie.getValue('loyalty_level_name');
+      var signedInStatus = site.userInfoCookie.getValue('signed_in');
+      var loyaltyPtsTxt = '';
+      var loyaltyPts = '';
+      var signInText = '';
+
+      // Loyalty points display based on the user log-in status
+      $('.js-site-header-utility-loyalty-non-member', context).removeClass('hidden');
+
+      if (!_.isUndefined(loyaltyMember) && !_.isNull(loyaltyMember)) {
+        // Loyalty program enable US websites hide the Stores/Spas menu
+        $('.js-site-header-utility-item-stores', context).addClass('hidden');
+        if (signedInStatus === '0') {
+          // Replace Account menu into Sign in menu for the ananymous user
+          signInText = $('.js-home-gnav-sign-in-text', context).text();
+          $('.js-gnav-util-trigger-account', context).html(signInText);
+        }
+      }
+      // Validate the user is logged in the website and user is a loyalty member
+      if (!_.isUndefined(signedInStatus) && !_.isNull(signedInStatus) && signedInStatus === '1' && loyaltyMember === '1') {
+        // Hide Join Loyalty menu to the loyalty member
+        $('.js-site-header-utility-loyalty-non-member', context).addClass('hidden');
+        // Show the Loyalty points with current loyalty to the loyalty member
+        $('.js-site-header-utility-loyalty-member', context).removeClass('hidden');
+        loyaltyPtsTxt = $('.js-home-gnav-loyalty-pts', context).text();
+        loyaltyPts = site.userInfoCookie.getValue('current_available');
+        // Thousands separator with commas
+        loyaltyPts = loyaltyPts.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        $('.js-home-gnav-loyalty-pts', context).html(loyaltyPts + ' ' + loyaltyPtsTxt + ' ' + loyaltyLevelName.toUpperCase());
+      }
+
+      $(document).on('mouseover', '.js-gnav-util-trigger-signup', function(event) {
+        event.preventDefault();
+        $thisContent.removeClass('hidden');
+      }).on('mouseleave', '.js-gnav-utit-content-signup', function(event) {
+        if (!$(event.target).is('input, span')) {
+          $('input:focus', context).blur();
+          $(this).addClass('hidden');
+        }
+      });
+
+      // Display Language Toggle Item on Mobile when the language toggle node exist.
+      self.displayLanguageToggleMobile(context);
+
+      // Build account menu items to be displayed in gnav
+      self.accountMenuList(context);
+
+      $hamburger.once().on('click', function() {
+        $mainMenu.toggleClass('active');
+
+        $(this).toggleClass('open');
+        $body.toggleClass('mobile_menu_open');
+        $('.site-content', context).toggleClass('mobile_menu_open');
+      });
+
+      $menuItemMobile.children('.js-nav-category-trigger').once().on('click', function(e) {
+        if ($body.width() <= parseInt(Unison.fetch.all().large)) {
+          var $thisMenuItem = $(this).parent();
+
+          if ($thisMenuItem.hasClass('menu__item--category').length) {
+            return;
+          }
+          e.preventDefault();
+
+          $menuHeadersMobile.removeClass('nonactive');
+          if ($thisMenuItem.hasClass('active')) {
+            $thisMenuItem.removeClass('active');
+            $mainMenu.animate({scrollTop: $thisMenuItem.position().top});
+          } else {
+            $menuHeadersMobile.removeClass('active');
+            $menuHeadersMobile.addClass('nonactive');
+            $thisMenuItem.addClass('active');
+            $mainMenu.animate({scrollTop: $thisMenuItem.position().top});
+          }
+        }
+      });
+
+      // If user has logged in, then show account related menu items in
+      // account dropdown displayed in gNav
+      $(document).on('user.loaded', function(e, data) {
+        var userObjData = data;
+        var userObjRes = !!userObjData === true ? userObjData : null;
+        if (!!userObjRes && typeof userObjRes.signed_in !== 'undefined') {
+          var $accountMenuSelect = $('.js-account-menu-select');
+          var $accountMenuToggle = $('.js-account-check') || '';
+          if ($accountMenuToggle !== '') {
+            $accountMenuToggle.toggleClass('hidden');
+          }
+          $('.js-site-header-utility-signed-in').removeClass('hidden');
+          $('.js-site-header-utility-not-signed-in').addClass('hidden');
+          if ($accountMenuSelect.data('selectBox-control') &&
+              $accountMenuSelect.hasClass('selectBox-attached')) {
+            $accountMenuSelect.selectBox('refresh');
+          }
+          // Update wishlist success message for logged in user
+          var $wishListContainer = $('.js-add-to-favorites');
+          var wishlistMessage = $wishListContainer.attr('data-tooltip-loggedin');
+          $wishListContainer.attr('data-tooltip-success', wishlistMessage);
+        }
+      });
+
+      if (!site.client.isMobile) {
+        $('.site-header__subnav').each(function() {
+          var $subNav = $(this);
+          if ($subNav.find('li').length >= 5) {
+            $subNav.addClass('init_slick'); //slick hidden hack
+            $subNav.on('init', function(event) {
+              setTimeout(function() {
+                $(event.target).removeClass('init_slick'); //slick hidden hack
+              }, 500);
+            });
+            try {
+              $subNav.slick({
+                variableWidth: true,
+                slidesToShow: 5,
+                slidesToScroll: 1,
+                accessibility: 0,
+              });
+            } catch (e) {
+              //Errors
+            }
+          }
+        });
+      }
+
+      //ADA compiant behaviors for tabbing through menus.
+      $('.js-nav-category-trigger').off('keydown').on('keydown', function(e) {
+        var $thisCategoryHeader = $(this);
+        var code = e.keyCode || e.which;
+        switch (code) {
+          case 40: //down arrow
+            e.preventDefault();
+            $('.js-nav-category-trigger').removeClass('hover');
+            $thisCategoryHeader.parent().addClass('hover');
+            $thisCategoryHeader.siblings('.js-nav-category-trigger-content').find('.slick-current  .js-nav-link-trigger')[0].focus();
+            break;
+          case 38: //up arrow
+            e.preventDefault();
+            $('.menu__item--category').removeClass('hover');
+            break;
+          case 9: //tab
+            if ($thisCategoryHeader.parent().next().find('.js-nav-category-trigger').length) {
+              e.preventDefault();
+              $thisCategoryHeader.parent().removeClass('hover');
+              if (e.shiftKey) {
+                $thisCategoryHeader.parent().prev().find('.js-nav-category-trigger').focus();
+              } else {
+                $thisCategoryHeader.parent().next().find('.js-nav-category-trigger').focus();
+              }
+            } else if ($thisCategoryHeader.parent().next().find('.js-nav-link-trigger').length) {
+              e.preventDefault();
+              if (e.shiftKey) {
+                $thisCategoryHeader.parent().prev().find('.js-nav-link-trigger').focus();
+              } else {
+                $thisCategoryHeader.parent().next().find('.js-nav-link-trigger').focus();
+              }
+            }
+            break;
+          case 13:
+            window.location = $thisCategoryHeader.attr('href');
+            break;
+        }
+      });
+
+      $('.menu--lvl-2 .js-nav-link-trigger').off('keydown').on('keydown', function(e) {
+        e.preventDefault();
+        var menuData = {};
+        menuData.thisMenuItem = $(this);
+        menuData.visibleMenuItems = menuData.thisMenuItem.parents('.slick-track').find("[aria-hidden='false']");
+        menuData.thisSlider = menuData.thisMenuItem.parents('.site-header__subnav');
+        var code = e.keyCode || e.which;
+
+        menuData.thisSlider.off('afterChange').on('afterChange', function() {
+          if (code === 39) {
+            menuData.thisMenuItem.parents('.site-header__subnav').find('.slick-active .js-nav-link-trigger').last()[0].focus();
+          } else {
+            menuData.thisMenuItem.parents('.site-header__subnav').find('.slick-active .js-nav-link-trigger').first()[0].focus();
+          }
+          menuData.thisSlider.off('afterChange');
+        });
+
+        switch (code) {
+          case 37: //left arrow
+            prevMenuItem(menuData);
+            break;
+          case 39: //right arrow
+            nextMenuItem(menuData);
+            break;
+          case 38: //up arrow
+            menuData.thisMenuItem.parents('.menu__item--category').removeClass('hover').find('.js-nav-category-trigger')[0].focus();
+            break;
+          case 9: //tab
+            if (e.shiftKey) {
+              prevMenuItem(menuData);
+            } else {
+              nextMenuItem(menuData);
+            }
+            break;
+          case 13: //enter
+            window.location = menuData.thisMenuItem.attr('href');
+            break;
+        }
+      });
+
+      var nextMenuItem = function(menuData) {
+        if (menuData.thisMenuItem.parent().is(menuData.visibleMenuItems.last())) {
+          menuData.thisSlider.slick('slickNext');
+        } else {
+          menuData.thisMenuItem.parent().next().find('.js-nav-link-trigger')[0].focus();
+        }
+      };
+
+      var prevMenuItem = function(menuData) {
+        if (menuData.thisMenuItem.parent().is(menuData.visibleMenuItems.first())) {
+          menuData.thisSlider.slick('slickPrev');
+        } else {
+          menuData.thisMenuItem.parent().prev().find('.js-nav-link-trigger')[0].focus();
+        }
+      };
+
+      //Sticky nav behaviors
+      var scrollThreshold = $headerMain.height() - $mainMenu.height();
+      $(window).on('scroll', _.throttle(function() {
+        if ($(window).scrollTop() >= scrollThreshold) {
+          // Remove sticky nav from PC for one page checkout
+          if (!$isOnePageCheckout) {
+            $header.addClass('sticky');
+            $pageContent.addClass('sticky-padding');
+          }
+        } else {
+          $header.removeClass('sticky');
+          $pageContent.removeClass('sticky-padding');
+        }
+      }, 100));
+
+      //nav
+    },
+    accountMenuList: function(context) {
+      // Build account menu items to be displayed in gnav
+      var $accountMenuList = $('.js-header-account-menu-list', context);
+      var $accountMenuSelectbox = $('.js-account-menu-select:not(a)', context);
+      var $accountMenuSelectboxElem = $('.js-account-menu-select', context);
+      var loyaltyMember = site.userInfoCookie.getValue('is_loyalty_member');
+      var firstName = site.userInfoCookie.getValue('first_name');
+      var profileNoNameTxt = '';
+      var greetingsTxt = '';
+      // Turn our menu into a select box
+      $accountMenuList.find('.menu li').each(function() {
+        var $menuItem = $(this);
+        var href = $menuItem.find('a').attr('href');
+        var text = $menuItem.text();
+        var classVal = '';
+        if (text.length > 0) {
+          classVal = 'js-nav-account-' + text.replace(' ', '-').toLowerCase();
+          // Show the loyalty menu only to the loyalty member, otherwise hide this menu
+          // js-loyalty-menu class should be added in the "Waves de La Mer" menu item
+          // EX - <span class="js-loyalty-menu">Waves de La Mer</span>
+          if ($menuItem.find('a span').hasClass('js-loyalty-menu') && !_.isUndefined(loyaltyMember) && !_.isNull(loyaltyMember) && loyaltyMember === '0') {
+            classVal = 'js-nav-account-' + text.replace(' ', '-').toLowerCase() + ' hidden';
+          }
+          // Show the loyalty points to the loyalty member, otherwise show the greeting message
+          // js-sign-in-menu class should be added in the "Sign In" menu item
+          // EX - <span class="js-sign-in-menu">Sign In</span>
+          if ($menuItem.find('a span').hasClass('js-sign-in-menu') && !_.isUndefined(loyaltyMember) && !_.isNull(loyaltyMember)) {
+            greetingsTxt = $('.js-home-gnav-greetings-text', context).text();
+            text = greetingsTxt + ' ' + firstName;
+            // If the loyalty member doesn't have a name on their profile, show the Devotee text for the name.
+            if (loyaltyMember === '1' && firstName === '') {
+              profileNoNameTxt = $('.js-home-gnav-loyalty-profile-no-name-text', context).text();
+              text = greetingsTxt + ' ' + profileNoNameTxt;
+            }
+          }
+        }
+        var option = '<option value="' + href + '" class="' + classVal + '">' + text + '</option>';
+        $accountMenuSelectbox.append(option);
+      });
+      // Build link that is ued to trigger page redirection
+      $accountMenuSelectbox.after('<a href="#" class="js-account-menu-link hidden"></a>');
+
+      if ($accountMenuSelectboxElem.data('selectBox-control') &&
+          $accountMenuSelectboxElem.hasClass('selectBox-attached')) {
+        $accountMenuSelectboxElem.selectBox('refresh');
+      }
+      $accountMenuSelectbox.on('change', function() {
+        var urlToOpen = $(this).val();
+        // Trigger link to page navigation
+        $('.js-account-menu-link').attr('href', urlToOpen).get(0).click();
+      });
+    },
+    // @TODO: I'm not sure that this is the right way to approach this problem. I would suggest redoing how this works. reference: CX-9738
+    displayLanguageToggleMobile: function(context) {
+      if (!site.client.isMobile) {
+        return;
+      }
+
+      var $utilityItemLangToggle = $('.js-country-select', context);
+      var $footerLangToggleDropdown = $('.js-footer-country-select', context);
+      var $itemLangToggle = $('.js-language-container', context);
+
+      if ($utilityItemLangToggle.length) {
+        $utilityItemLangToggle.closest('ul.site-header__utility-left').removeClass('mobile-hidden').addClass('utilitynav-mobile');
+        if ($itemLangToggle.length) {
+          $footerLangToggleDropdown.hide();
+        }
+      }
+    }
+  };
+})(jQuery);

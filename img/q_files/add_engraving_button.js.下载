@@ -1,0 +1,408 @@
+var site = site || {};
+site.panels = site.panels || {};
+var generic = generic || {};
+
+(function($) {
+  Drupal.behaviors.ELB_addToEngraving = {
+    attach: function(context) {
+      site.addEngravingButton(context);
+      site.deleteEngravingButton(context);
+    }
+  };
+})(jQuery);
+
+site.deleteEngravingButton = function(context) {
+  var $deleteEngrave = $('.js-delete-to-engraving', context);
+  $deleteEngrave.once('delete-engraving').on('click', function(e) {
+    e.preventDefault();
+    var $deleteEngraving = $(this);
+    var $form = $deleteEngraving.closest('.js-viewcart-engraving-form');
+    // retrieve form data
+    var params = $form.engravingJSON();
+    //error messages
+    var $error_node = $form.find('ul.error_messages');
+    $(this).closest('.js-engraving-view').children('.js-engraving-loading').removeClass('hidden');
+    generic.jsonrpc.fetch({
+      method: 'form.rpc',
+      params: [params],
+      onBoth: function(r) {
+        var messages = r.getMessages();
+        //Filter messages to remove SUCCESS messages
+        if (messages) {
+          messages = $.grep(messages, function(e) {
+            return $.inArray('SUCCESS', e.tags) === -1 && $.inArray('alter_monogram', e.tags) > 0;
+          });
+        }
+        //Filter messages to remove SUCCESS messages
+        //If we have error messages aftr stripping SUCCESS tags then show them otherwise we're successful
+        if (messages && messages.length) {
+          generic.showErrors(messages, $error_node, $form);
+        } else {
+          site.panels.reloadPanels({
+            noAnchor: true,
+            noAnchorAndMsg: true,
+            callback: function() {
+              Drupal.behaviors.ELB_addToEngraving.attach();
+            }
+          });
+          generic.overlay.hide();
+        }
+      }
+    });
+  });
+};
+
+site.addEngravingButton = function(context) {
+  site.engraveButtons(context);
+  site.engraveInfo();
+};
+site.showEngraving = function(skuData) {
+  var $addToEngraving = $('.js-add-to-engraving'),
+      $addToEngravingContainer = $('.js-engraving-container');
+  if (skuData.ENGRAVABLE !== null) {
+    $addToEngraving.attr('data-sku-base-id', skuData.SKU_BASE_ID);
+    $addToEngravingContainer.removeClass('hidden');
+  } else {
+    $addToEngravingContainer.addClass('hidden');
+  }
+};
+site.engraveInfo = function() {
+  var $engraveInfoPopup = $('.js-engraving-info');
+  $engraveInfoPopup.on('click', function(e) {
+    e.preventDefault();
+    $.ajax({
+      url: '/templates/engraving-popup-info.tmpl',
+      context: this,
+      success: function(data) {
+        generic.overlay.launch({
+          content: data,
+          cssClass: 'engraving-help-popup',
+          cssStyle: {
+            width: '710px',
+            height: '290px'
+          },
+          center: true,
+          lockPosition: false,
+          includeBackground: true,
+          backgroundNodeClickHide: true,
+        });
+      }
+    });
+  });
+};
+
+site.engraveButtons = function(context) {
+  var $engravingViewcart = $('#viewcart'),
+      $engravingLoading = $('.js-engraving-loading'),
+      $addEngrave = $('.js-add-to-engraving', context);
+  $addEngrave.once('add-to-engraving').on('click', function(e) {
+    e.preventDefault();
+    var $ele = $(this);
+    var dataSkubaseId = $ele.attr('data-sku-base-id');
+    var dataCartId = $ele.attr('data-cart-id');
+    var queryCardId = dataCartId ? '&CART_ID=' + dataCartId : '';
+    var query = '?SKU_BASE_ID=' + dataSkubaseId + queryCardId;
+    var engravingFont = ' popup' + $ele.attr('data-monogram-font');
+    $ele.closest('.js-engraving-view').children('.js-engraving-loading').removeClass('hidden');
+
+    $.ajax({
+      url: '/templates/engraving-qvform.tmpl' + query,
+      context: this,
+      success: function(data) {
+        generic.overlay.launch({
+          content: data,
+          cssClass: 'engraving-preview-popup js-engraving-preview-popup' + engravingFont,
+          cssStyle: {
+            width: '712px',
+            height: '500px'
+          },
+          center: true,
+          lockPosition: false,
+          includeBackground: true,
+          backgroundNodeClickHide: true,
+          onComplete: function() {
+            site.engravingInit();
+            var $viewcart = $('body#viewcart'),
+                $engravingMessage = $('.engraving-message');
+            //Retain values of font in overlay
+            if ($viewcart.length > 0) {
+              $engravingMessage.focus();
+            } else { //Other than viewcart page
+              $engravingMessage.addClass('engrave-choice-optima');
+            }
+          }
+        });
+      }
+    });
+  });
+
+  // When engraving popup form is closed, then hide the loading gif
+  $engravingViewcart.on('click', '.js-engraving-preview-popup #cboxClose', function() {
+    $engravingLoading.addClass('hidden');
+  });
+};
+
+site.engravingInit = function() {
+  var $engravingformWrap = $('.js-edit-form'),
+      $engravedPreview = $('.js-form-preview'),
+      $engravingPreviewButton = $('.js-engraving-preview-button'),
+      $engravingBackButton = $('.js-back-preview'),
+      $engravinFormContainer = $('form.js-engraving-form'),
+      $engravingAddtoBag = $('.js-engraving-save'),
+      $engravingCsInfo = $('.js-engraving-cs-info'),
+      $engravingFormMessage = $('input.engraving-message', $engravinFormContainer),
+      $engravingPreviewCsInfo = $('.js-engraving-preview-cs-info');
+
+  // Android Input box fix
+  var isAndroid = /android/i.test(navigator.userAgent.toLowerCase());
+  if (isAndroid) {
+    $engravinFormContainer.addClass('small-container');
+  }
+  $engravingBackButton.hide();
+  $engravingPreviewCsInfo.hide();
+  $engravingCsInfo.show();
+  $engravingPreviewButton.on('click', function(e) {
+    e.preventDefault();
+    var $form = $(this).closest('form.js-engraving-form'),
+        $engraveTextField = $form.find('.engraving-message');
+    /* retrieve form data*/
+    var params = $form.engravingJSON();
+    /*error messages*/
+    var $error_node = $form.find('ul.error_messages');
+    if ($engraveTextField.val().length === 0) {
+      generic.jsonrpc.fetch({
+        method: 'form.rpc',
+        params: [params],
+        onBoth: function(r) {
+          var messages = r.getMessages();
+          /*Filter messages to remove SUCCESS messages*/
+          if (messages) {
+            messages = $.grep(messages, function(e) {
+              return $.inArray('SUCCESS', e.tags) === -1 && $.inArray('alter_monogram', e.tags) > 0;
+            });
+          }
+          /*Filter messages to remove SUCCESS messages*/
+          /*If we have error messages aftr stripping SUCCESS tags then show them otherwise we're successful*/
+          if (messages && messages.length) {
+            $error_node.empty();
+            $engraveTextField.removeClass('error');
+            generic.showErrors(messages, $error_node, $form);
+          }
+        }
+      });
+    } else {
+      $error_node.empty();
+      $engraveTextField.removeClass('error');
+      $engravingPreviewButton.hide();
+      $engravingformWrap.hide();
+      $engravedPreview.addClass('active');
+      $engravingAddtoBag.show().css('display', 'block');
+      $engravingBackButton.show();
+      $engravingPreviewCsInfo.show();
+      $engravingCsInfo.hide();
+      $.colorbox.resize();
+      $engravingFormMessage.trigger('focus');
+    }
+  });
+  //Show Engraved Form and hide Preview
+  $engravingBackButton.on('click', function(e) {
+    e.preventDefault();
+    $engravedPreview.removeClass('active');
+    $engravingAddtoBag.hide();
+    $engravingformWrap.show();
+    $engravingPreviewButton.show();
+    $engravingBackButton.hide();
+    $engravingPreviewCsInfo.hide();
+    $engravingCsInfo.show();
+    $.colorbox.resize();
+  });
+  //Bind keyup, keydown paste and autocomplete for input text fields
+  $engravingFormMessage.on('input focus', function() {
+    var $msgTextNode = $(this);
+    var msgTextValue = $msgTextNode.val();
+    //Update the preview copy
+    var theId = $msgTextNode.attr('id').replace('txt-', 'preview-');
+    //Update Char count
+    var currentLength = msgTextValue.length;
+    var maxLength = $msgTextNode.attr('maxlength') || 10;
+    //Check and force the length of the field whilst typing
+    if (currentLength > maxLength) {
+      $msgTextNode.val(msgTextValue.substr(0, maxLength));
+      return false;
+    }
+    //Now update the counter
+    var $messageLenNode = $msgTextNode.closest('.js-engraving-form').find('.chars-left');
+    if ($messageLenNode.length > 0) {
+      $messageLenNode.html(currentLength + ' / ' + maxLength);
+    }
+    site.handleOverlayButton($msgTextNode, msgTextValue, theId);
+  });
+  $engravingFormMessage.trigger('focus');
+
+  //Add to Cart
+  var $saveEngrave = $('.js-engraving-form a.engraving-save');
+  $saveEngrave.on('click', function(e) {
+    e.preventDefault();
+    var $form = $(this).closest('form.js-engraving-form'),
+        $viewCart = $('#viewcart'),
+        $checkoutIndex = $('#index'),
+        $gnavCartIcon = $('.js-gnav-util-trigger--cart:visible'),
+        $backButton = $('.js-back-preview');
+    // retrieve form data
+    var params = $form.engravingJSON();
+    //error messages
+    var $error_node = $form.find('ul.error_messages');
+    generic.jsonrpc.fetch({
+      method: 'form.rpc',
+      params: [params],
+      onBoth: function(r) {
+        var resultGetData = r.getData();
+        if (resultGetData !== null && typeof resultGetData.ac_results !== 'undefined') {
+          // Pass the engraving collection info to last added item object
+          // So that, this info will be pulled by cart bag overlay
+          resultGetData.ac_results[0].result.CARTITEM['coll_info'] = resultGetData.coll_info;
+          var currentItem = r.getCartResults().getItem();
+          resultGetData.trans_data.order.items.map(function(a) {
+            if (a.COLLECTION_ID === currentItem.COLLECTION_ID) {
+              var result = a;
+            }
+          });
+        }
+        var messages = r.getMessages();
+        //Filter messages to remove SUCCESS messages
+        if (messages) {
+          messages = $.grep(messages, function(e) {
+            return $.inArray('SUCCESS', e.tags) === -1 && $.inArray('alter_monogram', e.tags) > 0;
+          });
+        }
+        //Filter messages to remove SUCCESS messages
+        //If we have error messages aftr stripping SUCCESS tags then show them otherwise we're successful
+        if (messages && messages.length) {
+          $error_node.empty();
+          $engravingFormMessage.removeClass('error');
+          generic.showErrors(messages, $error_node, $form);
+          if ($backButton.length > 0) {
+            $backButton.trigger('click');
+            $engravingFormMessage.trigger('focus');
+          }
+          $.colorbox.resize();
+        } else {
+          $(document).trigger('addKitToCart.success', [resultGetData]);
+          generic.overlay.hide();
+          if ($viewCart.length > 0 || $checkoutIndex.length > 0) {
+            site.panels.reloadPanels({
+              noAnchor: true,
+              noAnchorAndMsg: true,
+              callback: function() {
+                $gnavCartIcon.trigger('mouseover');
+                Drupal.behaviors.ELB_addToEngraving.attach();
+              }
+            });
+          }
+        }
+      }
+    });
+  });
+
+  $.fn.searchClassValue = function(prefix) {
+    var theClass = $(this).attr('class').match(new RegExp(prefix + '[0-9a-zA-Z_]+(s+)?', 'g'));
+    if ($.isArray(theClass)) {
+      return theClass[0];
+    }
+    return false;
+  };
+
+  $.fn.removeClassPrefix = function(prefix) {
+    this.each(function(i, el) {
+      var classes = el.className.split(' ').filter(function(c) {
+        return c.lastIndexOf(prefix, 0) !== 0;
+      });
+      el.className = $.trim(classes.join(' '));
+    });
+    return this;
+  };
+};
+
+site.handleOverlayButton = function(currentObj, msgTextValue, theId) {
+  var $this = currentObj;
+  var transformedEngravingCopy = msgTextValue;
+  var $newCanvasNode = $this.closest('form.js-engraving-form').find('.new-canvas');
+  var $placementNode = $newCanvasNode.find('.engrave-placement');
+  var $canvasNode = $newCanvasNode.find('span.canvas-orig');
+  $newCanvasNode.find('#' + theId).val(msgTextValue);
+  $canvasNode.removeClass('large-font');
+  if ($placementNode.width() < $canvasNode.width()) {
+    $canvasNode.addClass('large-font');
+  }
+  var previewCopy = $newCanvasNode.find('.preview-copy');
+  previewCopy.html(transformedEngravingCopy);
+};
+
+$.fn.engravingJSON = function() {
+  var form = this;
+  var formSerial = form.serializeArray();
+  // transform string into array of form elements
+  var paramStr = '',
+      params = {};
+  // iterate through collection to transform form name/value into key/value properties of a literal object string.
+  $.each(formSerial, function() {
+    var key = this.name,
+        value = this.value;
+    if (params[key]) { //If the key exists
+      if (!$.isArray(params[key])) { //and its not current already an array
+        params[key] = new Array(params[key], value); //Then create a new array with Stirng as key 0 and this value as key 1
+      } else {
+        params[key].push(value); //Otherwise if its already an array lets add the new value to the array say 3rd or 4th input
+      }
+    } else {
+      params[key] = value; //Otherwise its a simply string store
+    }
+  });
+  $.each(params, function(key, value) {
+    paramStr += '"' + key + '":"' + value + '",';
+  });
+  // parse the string and create the literal object
+  return eval('(' + '{' + paramStr.substring(0, paramStr.length - 1) + '}' + ')');
+};
+
+site.addToEngraving = function(args) {
+  var params = {
+    '_SUBMIT': 'alter_collection',
+    'action': 'add'
+  };
+  if ($.cookie('csrftoken')) {
+    params._TOKEN = $.cookie('csrftoken');
+  }
+  var skuBaseId;
+  if (args.skuData && args.skuData.SKU_BASE_ID) {
+    skuBaseId = args.skuData.SKU_BASE_ID;
+  } else if (args.skuBaseId) {
+    skuBaseId = args.skuBaseId;
+  } else {
+    return null;
+  }
+  params.SKU_BASE_ID = skuBaseId;
+
+  if (args.skuData && args.skuData.PARENT_CAT_ID) {
+    var matchResult = args.skuData.PARENT_CAT_ID.match('[0-9]+');
+    if (matchResult) {
+      params.CAT_BASE_ID = matchResult[0];
+    }
+  }
+
+  generic.jsonrpc.fetch({
+    method: 'rpc.form',
+    params: [params],
+    onSuccess: function(jsonRpcResponse) {
+      var d = jsonRpcResponse.getData();
+      var r = d.ac_results[0].result;
+
+      if (r.KEY === 'SKU_ALREADY_IN_COLLECTION.ADD_SKU.COLLECTION.SAVE') {
+        $(document).trigger('addToWishlist.exists', [r]);
+      } else if (r.SUCCESS === 1 || r.KEY === 'SUCCESS.ADD_SKU.COLLECTION.SAVE') {
+        var cr = jsonRpcResponse.getCartResults();
+        $(document).trigger('addToWishlist.success', [cr]);
+      }
+    },
+  });
+};

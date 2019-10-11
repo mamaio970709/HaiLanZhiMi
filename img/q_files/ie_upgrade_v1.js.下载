@@ -1,0 +1,15 @@
+(function($) {
+  var $ieUpgradeConstainer = $('.js-sitewide-ie-upgrade');
+  var $ieUpgradeClose = $('.js-sitewide-ie-upgrade__close');
+  /* Colorbox does not work on less than or equal IE9
+   * Display IE Upgrade Popup using basic function: append to the body.
+   */
+  if (navigator.userAgent.match(/MSIE 10|MSIE 9/)) {
+    $ieUpgradeConstainer.show();
+    $ieUpgradeClose.click(function() {
+      $ieUpgradeConstainer.hide();
+    });
+  } else {
+    $ieUpgradeConstainer.html('');
+  }
+}(jQuery));

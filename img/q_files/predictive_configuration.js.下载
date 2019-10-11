@@ -1,0 +1,73 @@
+/*
+    Endeca configuration for the typeahead endeca instance. 
+    
+    See comments in site.endeca.instances.search.configuration    
+*/
+
+var site = site || {};
+site.endeca = site.endeca || {};
+site.endeca.instances = site.endeca.instances || {};
+site.endeca.instances.typeahead = site.endeca.instances.typeahead || {};
+
+jQuery(document).ready(function(){
+    site.endeca.instances.typeahead.configuration = jQuery.extend( true, {}, site.endeca.configuration, {
+        followRedirects                   : false,
+        minSearchLength                   : 3,
+		    fullSearchBaseUrl                 : "/esearch?search=",
+        
+        nodes: {
+            wrapper                       : jQuery('.js-end-typeahead-wrapper'),
+            inputElements                 : jQuery('.js-end-search-term'),
+            recommendation                : jQuery('.js-end-typeahead-recommendations'),
+            loading                       : jQuery('.js-end-typehead-loading')
+        },
+        
+        queries: {
+            product: {
+                //searchKey                 : 'typeahead',
+                recordsPerPage            : 3,
+                recordFilters             : ['discontinued', 'activeSkus', 'products']
+            }
+        },
+        
+        results: {
+            products: {
+                baseClass                 : 'site.endeca.results',
+                instanceArgs: {
+                    parentNode            : jQuery('.js-end-typeahead-product-results', '.js-end-typeahead-wrapper'),
+                    childTemplatePath     : '/templates/endeca/typeahead/product-result.tmpl',
+                    childTemplatePathSku  : '/templates/endeca/typeahead/product-sku-result.tmpl'
+                }, 
+                configuration: {
+                    limit: 6
+                }
+            },
+            terms: {
+                baseClass                 : 'site.endeca.results',
+                instanceArgs: {
+                    parentNode            : jQuery('.js-end-typeahead-term-results', '.js-end-typeahead-wrapper'),
+                    templatePath          : '/templates/endeca/typeahead/term-result.tmpl'
+                }, 
+                configuration: {
+                    limit: 1
+                }
+            },
+            noResults: {
+                baseClass                 : 'site.endeca.results',
+                instanceArgs: {
+                    parentNode            : jQuery('.js-end-typeahead-no-results'),
+                    templatePath          : '/templates/endeca/typeahead/term-no-result.tmpl'
+                }
+            },
+            seeResults: {
+                baseClass                 : 'site.endeca.results',
+                instanceArgs: {
+                    parentNode            : jQuery('.js-end-typeahead-see-results', '.js-end-typeahead-wrapper'),
+                    templatePath          : '/templates/endeca/typeahead/term-result.tmpl'
+                }
+            }
+        }
+    });
+    
+    new site.endeca.instances.typeahead.control( site.endeca.instances.typeahead.configuration );
+});

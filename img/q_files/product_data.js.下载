@@ -1,0 +1,241 @@
+var prodcat = prodcat || {};
+prodcat.data = prodcat.data || {};
+
+var site = site || {};
+site.onLoadRpc = site.onLoadRpc || {};
+site.onLoadRpc.requests = site.onLoadRpc.requests || [];
+
+(function($) {
+
+prodcat.data.collectProductIds = function($context) {
+  var prodIds = [];
+  $('[data-product-id]', $context).each(function() {
+    var $this = $(this);
+    var prodId = $this.attr('data-product-id');
+    // Check if a prodId exists
+    if (!prodId) {
+      return null;
+    };
+    var insert = true;
+    for (var i = prodIds.length - 1; i > -1; i--) {
+      if (prodIds[i] === prodId) {
+        insert = false;
+        break;
+      }
+    }
+    if (insert) {
+      prodIds.push(prodId);
+    }
+    insert = true;
+  });
+  return prodIds;
+};
+
+/**
+ * Retrieves product data from data store. Folds full sku data into product.skus array
+ * @param {String} prodId
+ */
+prodcat.data.getProduct = function(prodId) {
+  if (!prodcat.data.store.products[prodId]) {
+    return null;
+  }
+  var prodData = $.extend( true, {}, prodcat.data.store.products[prodId] );
+  _.each(prodData.skus, function(skuId, idx) {
+    prodData.skus[idx] = prodcat.data.getSku(skuId);
+  });
+  return prodData;
+};
+
+prodcat.data.getSku = function(skuId) {
+  skuId = skuId + ''; // Has to be a string to run indexOf
+  skuId = skuId.indexOf('SKU') === 0 ? skuId : 'SKU' + skuId;
+  var skuData = prodcat.data.store.skus[skuId];
+  if (!skuData){
+    return null;
+  }
+  return skuData;
+};
+
+/**
+ * Sanitize the product data to ensure a consistent data structure
+ */
+prodcat.data.sanitizeProductData = function(product) {
+  // Force the following fields to be an array even if they're originally a string
+  var pf = ['LARGE_IMAGE'],
+      fk = '';
+  for (var i = pf.length; i--;) {
+    fk = pf[i];
+    if (_.isUndefined(product[fk])) {
+      continue;
+    }
+    product[fk] = (typeof product[fk] === 'string') ? [ product[fk] ] : product[fk];
+  }
+
+  return product;
+};
+
+
+$(document).on('prodcat.products.update', function(e, productsArray, deepCopy) {
+  prodcat.data.updateProducts(productsArray, deepCopy);
+});
+
+prodcat.data.updateProducts = function(productsArray, deepCopy) {
+  var self = this;
+  deepCopy = (deepCopy === false) ? deepCopy : true;  // do a deep copy of the product data by default
+  _.each(productsArray, function(newProd) {
+    if (!newProd) {
+      return;
+    }
+    var targetProd = $.extend(deepCopy, {}, newProd);
+    var oldProd = prodcat.data.store.products[newProd.PRODUCT_ID];
+
+    if (_.isArray(newProd.skus)) {
+      prodcat.data.updateSkus(targetProd.skus);
+      targetProd.skus = _.map(targetProd.skus, function(sku) {
+        return sku.SKU_ID;
+      });
+    }
+
+    var prod = prodcat.data.sanitizeProductData(_.isObject(oldProd) ? _.extend(oldProd, targetProd) : targetProd);
+
+    // Set defaultSku to the first sku if not already set:
+    if (_.isUndefined(prod.defaultSku) && prod.skus && prod.skus.length) {
+      prod.defaultSku = self.getSku(prod.skus[0]);
+    }
+
+    prodcat.data.store.products[targetProd.PRODUCT_ID] = prod;
+  });
+
+  $(document).trigger('prodcat.products.updated', prodcat.data.store.products);
+};
+
+/**
+ * Sanitize the sku data to ensure a consistent data structure
+ */
+prodcat.data.sanitizeSkuData = function(sku) {
+  // Remove any "product" keys from the sku object to prevent recursion errors down the road.
+  sku.product = undefined;
+
+  // Force the following fields to be an array even if they're originally a string
+  var sf = ['IMAGE_SMOOSH_L'],
+      fk = '';
+  for (var i = sf.length; i--;) {
+    fk = sf[i];
+    if (_.isUndefined(sku[fk])) {
+      continue;
+    }
+    sku[fk] = (typeof sku[fk] === 'string') ? [ sku[fk] ] : sku[fk];
+  }
+
+  return sku;
+};
+
+prodcat.data.updateSkus = function(skusArray) {
+  _.each(skusArray, function(newSku) {
+    newSku = prodcat.data.sanitizeSkuData(newSku);
+    var oldSku = prodcat.data.store.skus[newSku.SKU_ID];
+    prodcat.data.store.skus[newSku.SKU_ID] = _.isObject(oldSku) ? _.extend(oldSku, newSku) : newSku;
+  });
+};
+
+prodcat.data.init = function() {
+  prodcat.data.store = {
+    categories: {},
+    products: {},
+    skus: {}
+  };
+
+  if (typeof page_data === "undefined" || !page_data) {
+    return null;
+  }
+
+  function _catStore(newCat) {
+    var oldCat = prodcat.data.store.categories[newCat.CATEGORY_ID];
+    var targetCat = $.extend(true, {}, newCat);
+    if (_.isArray(targetCat.products)) {
+      prodcat.data.updateProducts(targetCat.products);
+    }
+    targetCat.products = _.map(targetCat.products, function(prod) {
+      return prod.PRODUCT_ID;
+    });
+    prodcat.data.store.categories[targetCat.CATEGORY_ID] = _.isObject(oldCat) ? _.extend(oldCat, targetCat) : targetCat;
+  }
+
+  for (var key in page_data) {
+    if (!page_data[key]) {
+      continue;
+    }
+    if (page_data[key].categories && _.isArray(page_data[key].categories)) {
+      _.each(page_data[key].categories, _catStore);
+    }
+    if (page_data[key].products && _.isArray(page_data[key].products)) {
+      prodcat.data.updateProducts(page_data[key].products);
+    }
+    if (page_data[key].product && _.isObject(page_data[key].product)) {
+      $(document).trigger('prodcat.products.update', [page_data[key].product]);
+      prodcat.data.updateProducts([page_data[key].product]);
+    }
+  }
+
+  $(document).trigger('prodcat.data.initalized', prodcat.data.store);
+};
+
+prodcat.data.pids = prodcat.data.collectProductIds();
+// Prevent making an empty call if no prodIds are available.
+if (prodcat.data.pids.length > 0) {
+  site.onLoadRpc.requests.push({
+    method:   "prodcat.querykey",
+    getParams: function() {
+      var pids = prodcat.data.pids;
+      return [{
+        products: pids,
+        query_key: 'catalog-mpp-volatile'
+      }];
+    },
+    onSuccess: function (r) {
+      if (
+        !r ||
+        !r.result ||
+        !r.result.value ||
+        !r.result.value.products
+      ) {
+        return;
+      }
+  
+      var prods = _.compact(r.result.value.products);
+      prodcat.data.updateProducts(prods);
+
+      _.each(prods, function(prod) {
+        var prodSlctr = "[data-product-id='" + prod.PRODUCT_ID + "']";
+        $(prodSlctr).trigger("inv_status_data:updated");
+      });
+
+      if (prods.length > 0) { // can't think of a reason why this WOULD be empty, but check, just in case
+        // trigger a custom event, letting all who care know that we've updated inventory status data for every product
+        $(document).trigger("inv_status_data:finished");
+      }
+
+      $(document).trigger('prodcat.data.query.success');
+    }
+  });
+}
+
+prodcat.data.isPaletteMultiSku = function(prodId) {
+  var prodData = prodcat.data.getProduct(prodId);
+  return !!prodData.isPaletteMultiSku;
+};
+
+/**
+ * Pull data from page_data and store internally.
+ */
+Drupal.behaviors.prodcatDataInit = {
+  attached: false,
+  attach: function() {
+    if (!this.attached) {
+      prodcat.data.init();
+    }
+    this.attached = true;
+  }
+};
+
+})(jQuery);

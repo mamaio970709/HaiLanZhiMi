@@ -1,0 +1,44 @@
+var prodcat = prodcat || {};
+prodcat.data = prodcat.data || {};
+
+(function($) {
+  Drupal.behaviors.stickyAddToBagV1 = {
+    attach: function(context) {
+      var $product = $('.js-product', context);
+      var skuBaseId = $product.data('sku-base-id');
+      var prod = $product ? prodcat.data.getProduct($product.data('product-id')) : null;
+      var sku = prodcat.data.getSku(skuBaseId);
+      var $sticky = $('.js-sticky-add-to-bag', context);
+      var $select = $('.js-sku-menu', $sticky);
+
+      var $selectBox = new SelectBox($select, settings = {});
+
+      $(window).on('scroll', _.throttle(function() {
+        //console.log('window scroll');
+        $selectBox.hideMenus();
+      }, 150));
+
+      var $stickyImage = $('.js-sticky-add-to-bag__image', $product);
+      if ($stickyImage.length) {
+        $('.js-sticky-add-to-bag__image', $product).attr('src', sku.LARGE_IMAGE[0]);
+      }
+
+      // sticky Add To Bag bar
+      $(document).on('product.skuSelect', '.js-product', function(event, skuBaseId) {
+        $selectBox.setValue(skuBaseId);
+
+        var $product = $(this);
+        var prod = $product ? prodcat.data.getProduct($product.data('product-id')) : null;
+        var sku = prodcat.data.getSku(skuBaseId);
+        var $stickyImage = $('.js-sticky-add-to-bag__image', $product);
+        var $stickySkuSelect = $('.js-sticky-add-to-bag__sku-select-menu', $product);
+        if ($stickySkuSelect.length) {
+          $stickySkuSelect.removeClass('hidden');
+        }
+        if ($stickyImage.length) {
+          $('.js-sticky-add-to-bag__image', $product).attr('src', sku.LARGE_IMAGE[0]);
+        }
+      });
+    }
+  };
+})(jQuery);

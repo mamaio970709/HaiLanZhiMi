@@ -1,0 +1,49 @@
+(function($) {
+
+  Drupal.behaviors.productFlagV1 = {
+    attach: function(context) {
+      var $template = $('.js-product-flag--v1', context);
+      var $mppContainer = $('.js-mpp-container', context);
+      var $sortContainer = $('.js-product-grid-sorted', $mppContainer);
+      var $sortByNew = $('.js-mpp-sort-option--new');
+      var limit = 16;
+
+      // Cant map to a constant in .net so here we are
+      // Grab text. format. and map to css classname
+      $template.each(function() {
+        var $element = $('.js-product-flag__badge', $(this));
+        var label = $element.attr('data-label');
+        var newLabel = label.replace(/\s+/g, '-').toLowerCase();
+
+        $element.addClass('active');
+
+        if(label.length > limit) {
+          // drop restrictive graphic element if text is too long
+          $element.addClass('product-flag__badge--no-graphic');
+        } else {
+          $element.addClass('product-flag__badge--' + newLabel);
+        }
+
+        // Sort by new
+        if (label === 'New' ||
+            label === 'new' ||
+            label === 'Newest' ||
+            label === 'newest' ) {
+          $(this).parents('.js-product-grid-item--sortable').attr('data-newest-sort', '1');
+        }
+
+      });
+
+      // sort by 'new' is different than the typical sorting behavior since we are looking for products by badge/flag. Since there can be a product grid where no products have the 'new' badge/flag we will hide that sort option if none exist
+      if (!$sortContainer.find('.product-flag__badge--new').length) {
+        $sortByNew.hide();
+      }
+
+    }
+  };
+
+  $(document).on('productflag.init', function(event, newContext) {
+    Drupal.behaviors.productFlagV1.attach(newContext, Drupal.settings);
+  });
+
+})(jQuery);

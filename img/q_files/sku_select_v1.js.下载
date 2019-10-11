@@ -1,0 +1,31 @@
+(function($, prodcat) {
+
+  // When the menu changes, trigger skuSelect:
+  $(document).on('change', 'select.js-sku-menu', function() {
+    var skuId = $(this).val();
+    var sku = prodcat.data.getSku(skuId);
+    var skuBaseId;
+    if (sku) {
+      skuBaseId = sku.SKU_BASE_ID;
+      $(this).closest('.js-product').trigger('product.skuSelect', [skuBaseId]);
+    }
+  });
+
+  // Likewise, whenever skuSelect is fired on a product, update the menu:
+  $(document).on('product.skuSelect', '.js-product', function(event, skuBaseId) {
+    $('select.js-sku-menu', this).val(skuBaseId);
+    $('select.js-sku-menu.selectBox-attached', this).selectBox('value', skuBaseId);
+
+    // Price update logic
+    var sku = prodcat.data.getSku(skuBaseId);
+    if (sku) {
+      // Need to wrap sku inside of defaultSku because thats where the template reads
+      var content = site.template.get({
+        name: 'product_sku_price',
+        data: { selectedSku: sku }
+      });
+      $('.product-sku-price', this).html($(content).html());
+    }
+  });
+
+})(jQuery, window.prodcat || {});

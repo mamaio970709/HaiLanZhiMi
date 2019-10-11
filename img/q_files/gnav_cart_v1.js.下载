@@ -1,0 +1,484 @@
+Drupal.behaviors.gnavCart = (function($, _, site, generic) {
+  'use strict';
+
+  // Private variables:
+  var $blocks = $();
+  var $trigger = $();
+  var $counters = $();
+  var $closeTrigger = $();
+  var contextObj = null;
+
+  var data = {
+    item_count: 0,
+    subtotal: '',
+    points: 0,
+    order_within: '',
+    ship_sooner_date: '',
+    items: [],
+    singular: 0,
+    new_items: []
+  };
+  var state = 'empty';
+  var loaded = false;
+  var closeNav = false;
+  var closeTimeout;
+
+  // Replace dots in the top-level key names the server is giving us.
+  // 'prod.PROD_RGN_NAME' --> 'prod_PROD_RGN_NAME'
+  function _normalizeResponseKeys(items, recursionLevel) {
+    // initialise to `0` if `undefined`. DH
+    recursionLevel = recursionLevel || 0;
+
+    // I don't forsee more than 100 nested objects being legitimately required... DH
+    if (Object.prototype.toString.call(items) !== '[object Array]' || recursionLevel > 100) {
+      return items;
+    }
+
+    var replaceKey = function(key) {
+      return key.replace(/\./, '_');
+    };
+
+    var out = [];
+
+    for (var i = 0, len = items.length; i < len; i++) {
+      out[i] = {};
+
+      for (var key in items[i]) {
+        if (items[i].hasOwnProperty(key)) {
+          out[i][replaceKey(key)] = items[i][key];
+        }
+
+        // if we have sub items, normalise those keys too. DH
+        if (key === 'items' && items[i][key] && items[i][key].length) {
+          out[i][replaceKey(key)] = _normalizeResponseKeys(items[i][key], recursionLevel + 1);
+        }
+      }
+    }
+
+    return out;
+  }
+
+  function _setCloseTimeout() {
+    if (state !== 'added') {
+      return;
+    }
+
+    closeTimeout = setTimeout(function() {
+      if (closeNav) {
+        //Drupal.behaviors.gnav.close();
+        $('.js-cart-block-container').removeClass('visible');
+      }
+      behavior.setState();
+    }, 5000);
+  }
+
+  function _clearCloseTimeout() {
+    clearTimeout(closeTimeout);
+  }
+
+  // Public methods:
+  var behavior = {
+    attach: function(context) {
+      $trigger = $trigger.add($('.gnav-util--cart', context)).first();
+      $blocks = $blocks.add($('.js-gnav-util__content__inner--cart', context));
+      $counters = $counters.add($('.gnav-util__icon__cart-count', context));
+
+      // Get the initial item count from the cookie to avoid unnecessary trips
+      // to the server.
+      this.setData({ item_count: site.userInfoCookie.getValue('item_count') - 0 });
+      contextObj = context;
+      if (site.userInfoCookie.getValue('item_count')) {
+        $(document).off('ajaxComplete.itemCount');
+      }
+    },
+
+    render: function() {
+      // Stop the renderer if the gnav_cart_content JS var doesn't exist
+      if (_.isUndefined(site['templates']['gnav_cart_content'])) {
+        return;
+      }
+
+      var rendered = site.template.get({
+        name: 'gnav_cart_content',
+        data: data
+      });
+
+      // Some of the field values may actually contain mustache themselves, so
+      // this template needs to be run through rendering a second time.
+      rendered = site.template.render(rendered, data);
+
+      $blocks.html(rendered);
+
+      // Update the counters that are outside of the template
+      $counters.text(data.item_count);
+
+      // content block close
+      // js-gnav-util-close
+      $closeTrigger = $('.js-gnav-util-close', contextObj);
+      $closeTrigger.off().on('click', function(event) {
+        event.preventDefault();
+        $(this).parent().addClass('hidden');
+      });
+
+      return this;
+    },
+
+    load: function(force) {
+      if (loaded && (!_.isBoolean(force) || !force)) {
+        return this;
+      }
+
+      $blocks.addClass('loading');
+
+      generic.jsonrpc.fetch({
+        method: 'trans.get',
+        params: [{
+            trans_fields : ['TRANS_ID', 'totals'],
+            payment_fields : [],
+            order_fields : ['items', 'samples', 'offerCodes']
+        }],
+        onSuccess: function(response) {
+          $blocks.removeClass('loading');
+
+          var value = response.getValue();
+          var cartItems = value.order.items.concat(value.order.samples);
+          if (_.isUndefined(value) || !value) {
+            return;
+          }
+          behavior.setData({
+            subtotal: value.formattedSubtotal,
+            points: value.points,
+            order_within: '', // This was removed from the designs
+            ship_sooner_date: '', // This was removed from the designs
+            item_count: value.items_count,
+            items: _normalizeResponseKeys(cartItems)
+          });
+          behavior.setOverlayHeight(contextObj);
+        },
+        onError: function() {
+          $blocks.removeClass('loading');
+          // @TODO: a failure message should go here.
+          loaded = false;
+        }
+      });
+
+      // Don't put loaded in success function! That allows the user to fire
+      // additonal requests while the first is still loading.
+      loaded = true;
+
+      return this;
+    },
+
+    addItem: function(result) {
+      if (_.isUndefined(result) || !result || _.isUndefined(result.trans_data) || _.isUndefined(result.ac_results)) {
+        return this;
+      }
+
+      var resultType = this.getResultType(result.ac_results);
+
+      if (resultType === 'replenishment') {
+        // remove result.type REPL from results
+        // causes a duplicate sku to show in cart dropdown
+        result.ac_results = _.reject(result.ac_results, function(result) {
+          return result.type == 'REPL';
+        });
+      }
+
+      var addedItems = '';
+      addedItems = _.map(result.ac_results, function(value) {
+        var res = value.result;
+        var item = res.CARTITEM;
+
+        // Seems very dumb to calculate this on the front end.
+        item.new_qty = Math.max(1, item.ITEM_QUANTITY - res.PREVIOUS_ITEM_QUANTITY);
+        if (Drupal.settings.common.enable_preorder || Drupal.settings.common.show_taxed_price) {
+          var allResults = result;
+          var skuBaseID = item["sku.SKU_BASE_ID"];
+          if (skuBaseID != null) {
+            var allItems = allResults.trans_data.order.items;
+            $.each(allItems, function(i, items) {
+              if (items['sku.SKU_BASE_ID'] === skuBaseID) {
+                if (Drupal.settings.common.enable_preorder) {
+                  item.preOrderMsgShort = items.preOrderMsgShort;
+                }
+                if (Drupal.settings.common.show_taxed_price) {
+                  item.formattedTaxedAppliedPrice = items.formattedTaxedAppliedPrice;
+                }
+              }
+            });
+          }
+        }
+        return item;
+      });
+
+      this.setData({
+        subtotal: result.trans_data.formattedSubtotal,
+        points: result.trans_data.points === 0 ? 0 : (result.trans_data.points || data.points),
+        items: _normalizeResponseKeys(result.trans_data.order.items),
+        item_count: result.trans_data.items_count,
+        new_items: _normalizeResponseKeys(addedItems)
+      });
+
+      // Temporarily set the added state:
+      this.setState('added');
+      // @todo we do not have a global function for gnav
+      // @setup new brand - this can be re-enabled if gnav elements need to be bound
+      //Drupal.behaviors.gnav.open($trigger);
+
+      closeNav = true;
+      // The response after you added to bag contains trans_data.order.items,
+      // which should be your entire cart, so there's no reason to load the cart
+      // again:
+      loaded = true;
+      _setCloseTimeout();
+
+      return this;
+    },
+    addKitItem: function(result) {
+      if (_.isUndefined(result) || !result || _.isUndefined(result.trans_data) || _.isUndefined(result.ac_results) || _.isUndefined(result.coll_info)) {
+        return this;
+      }
+
+      if (!_.isUndefined(result.coll_info.COLLECTION_ID) && (result.coll_info.COLLECTION_TYPE === 'UKIT' || result.coll_info.COLLECTION_TYPE === 'MONO')) {
+        var newCollectionId = result.coll_info.COLLECTION_ID;
+        var addedItems = '';
+        var allResults = result;
+        var allItems = allResults.trans_data.order.items;
+
+        addedItems = _.filter(allItems, function(item) {
+          if (item['COLLECTION_ID'] === newCollectionId) {
+            return item;
+          }
+        });
+        behavior.setData({
+          subtotal: result.trans_data.formattedSubtotal,
+          points: result.trans_data.points === 0 ? 0 : result.trans_data.points || data.points,
+          items: _normalizeResponseKeys(result.trans_data.order.items),
+          item_count: result.trans_data.items_count,
+          new_items: _normalizeResponseKeys(addedItems)
+        });
+
+        // Temporarily set the added state:
+        this.setState('added');
+
+        closeNav = true;
+        // The response after you added to bag contains trans_data.order.items,
+        // which should be your entire cart, so there's no reason to load the cart
+        // again:
+        loaded = true;
+        _setCloseTimeout();
+
+        return this;
+      }
+    },
+
+    addOffer: function(result) {
+      if (_.isUndefined(result) || !result || _.isUndefined(result.trans) || _.isUndefined(result.items)) {
+        return this;
+      }
+      //var resultType = this.getResultType(result.ac_results);
+
+      // var addedItems = '';
+      // addedItems = _.map(result.ac_results, function(value) {
+      //   var item = result.items;
+
+      //   // Seems very dumb to calculate this on the front end.
+      //   item.new_qty = Math.max(1, item.ITEM_QUANTITY - res.PREVIOUS_ITEM_QUANTITY);
+
+      //   return item;
+      // });
+
+      this.setData({
+        subtotal: result.trans.formattedSubtotal,
+        points: result.trans.points === 0 ? 0 : (result.trans.points || data.points),
+        items: _normalizeResponseKeys(result.trans.order.items),
+        item_count: result.trans.items_count,
+        new_items: _normalizeResponseKeys(result.trans.order.samples)
+      });
+
+      // Temporarily set the added state:
+      this.setState('added');
+      // @todo we do not have a global function for gnav
+      // @setup new brand - this can be re-enabled if gnav elements need to be bound
+      //Drupal.behaviors.gnav.open($trigger);
+
+      closeNav = true;
+      // The response after you added to bag contains trans.order.items,
+      // which should be your entire cart, so there's no reason to load the cart
+      // again:
+      loaded = true;
+      _setCloseTimeout();
+
+      return this;
+    },
+
+    // Dynamically calculate the overlay height such that it fills the screen height
+    // at the maximum and scrolls overflowing items
+    setOverlayHeight: function(context) {
+      // There are two of these on the site (network and non-network), so
+      // grab the visible one for the correct height values later.
+      var $bagContents = $('.js-cart-block-container.js-cart-visible', context);
+
+      // set height of entire overlay to window height, less gnav offset
+      var siteHeaderHeight = parseInt($bagContents.css('top'));
+      var overlayHeight = $(window).height() - siteHeaderHeight;
+
+      $bagContents.height('auto');
+      $bagContents.css('max-height', overlayHeight);
+
+      // set height of product list to available space
+      var cartHeaderHeight = $bagContents.find('.js-cart-block-header:visible').outerHeight(true);
+      var cartFooterHeight = $bagContents.find('.js-cart-block-footer:visible').outerHeight(true);
+      var $cartProductsContainer = $bagContents.find('.js-cart-block-items-all');
+
+      var productsHeight = overlayHeight - cartHeaderHeight - cartFooterHeight;
+      $cartProductsContainer.height('auto');
+      $cartProductsContainer.css('max-height', productsHeight);
+    },
+
+    // Setters:
+    setState: function(newState) {
+      var states = ['empty', 'nonempty', 'added'];
+      var classPrefix = 'cart-block--';
+      var stateClasses = classPrefix + states.join(' ' + classPrefix);
+
+      // If state is undefined, figure it out:
+      if (_.isUndefined(newState)) {
+        state = data.item_count > 0 ? 'nonempty' : 'empty';
+      }
+      // Sanity check:
+      else if (!_.contains(states, newState)) {
+        throw new Error('"' + newState + '" is not a valid cart state.');
+      }
+      else {
+        state = newState;
+      }
+
+      $blocks.removeClass(stateClasses).addClass(classPrefix + state);
+      $trigger.toggleClass('gnav-util--cart--nonempty', state !== 'empty');
+
+      return this;
+    },
+
+    setData: function(newData) {
+      _.extend(data, newData);
+      data.singular = (data.item_count === 1);
+
+      this.setState().render();
+
+      return this;
+    },
+
+    // Getters:
+    getState: function() {
+      return state;
+    },
+
+    getData: function(key) {
+      return _.isUndefined(key) ? data : data[key];
+    },
+
+    getResultType: function(results) {
+      var type = 'sku';
+
+      var isReplenishment = _.filter(results, function(result) {
+        return result.instance == 'alter_replenishment' && result.type == 'REPL';
+      });
+      if (isReplenishment.length > 0) {
+        type = 'replenishment';
+      }
+
+      return type;
+    }
+  };
+
+  // Document listeners:
+  $(document).on('offerToCart.success', function(event, result) {
+    $('.js-cart-block-container').addClass('visible');
+    behavior.addOffer(result);
+  });
+
+  // Document listeners:
+  $(document).on('addToCart.success', function(event, result) {
+    // @setup new brand - this is temporary open/close for testing add to cart
+    // a more integrated method with all gnav should be done per brand
+    $('.js-cart-block-container').addClass('visible');
+    behavior.addItem(result);
+  });
+
+  $(document).on('addKitToCart.success', function(event, result) {
+    // @setup new brand - this is temporary open/close for testing add to cart
+    // a more integrated method with all gnav should be done per brand
+    $('.js-cart-block-container').addClass('visible');
+    behavior.addKitItem(result);
+  });
+
+  $(document).on('loadCart.success', function(event, force) {
+    behavior.load(true);
+  });
+
+  // Override preventDefault on gnav overlay logic if cart is empty:
+  $(document).on('click', '.js-gnav-util-trigger--cart', function() {
+    if (state === 'empty') {
+      window.location = $(this).attr('href');
+      return true;
+    }
+    if (Unison.fetch.now().name === "small") {
+      return false;
+    }
+  });
+
+  $(window).resize(_.debounce(function() {
+    if ($('body', contextObj).hasClass('gnav-active') && gNav.isDesktop) {
+      behavior.setOverlayHeight(contextObj);
+    }
+  }, 250));
+
+  $(document).on('mouseenter', '.js-cart-block-container', _clearCloseTimeout);
+  $(document).on('mouseleave', '.js-cart-block-container', _setCloseTimeout);
+
+  $(document).on('click', '.cart-block__items__view-bag', function(event) {
+    event.preventDefault();
+
+    _clearCloseTimeout();
+    behavior.setState().render();
+  });
+
+  $(document).on('mouseover', '.js-gnav-util-trigger--cart', function(event, args) {
+    event.preventDefault();
+
+    if ($blocks.hasClass('loading')) {
+      return;
+    }
+
+    if ($('.gnav-util--cart').length) {
+      // Do nothing if the cart is empty:
+      //if (state === 'empty' || state === 'added') {
+      if (data.item_count == 0) {
+        return;
+      }
+      var $thisContent = $(this).next('.js-gnav-util__content');
+      $thisContent.addClass('js-cart-visible');
+      $('body').removeClass('mobile-gnav-active');
+      $('.js-gnav-util__content').not($(this).next('.js-gnav-util__content')).addClass('hidden');
+      $(this).next('.js-gnav-util__content').removeClass('hidden');
+      //visibility of dropdown is handled in css
+      behavior.load(true);
+    }
+  });
+
+  $(document).on('ajaxComplete.itemCount', function() {
+    var itemCountValue = parseInt(site.userInfoCookie.getValue('item_count')) || 0;
+    behavior.setData({
+      item_count: itemCountValue
+    });
+    return behavior;
+  });
+
+  return behavior;
+})(
+  window.jQuery = window.jQuery || function() {},
+  window._ = window._ || {},
+  window.site = window.site || {},
+  window.generic = window.generic || {}
+);

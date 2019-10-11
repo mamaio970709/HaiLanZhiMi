@@ -1,0 +1,78 @@
+(function($) {
+  Drupal.behaviors.animations = {
+    attach: function(context) {
+
+      function resizePictureSize($picture) {
+        var $img = $('img', $picture);
+        if ($img.length > 1) {
+          var maxHeight = 0;
+          $img.each(function() {
+            if ($(this).height() > maxHeight) {
+              maxHeight = $(this).height();
+            }
+          });
+          $picture.css({'min-height': maxHeight});
+        }
+      }
+
+      function setPictureSize($picture) {
+        $(window).off('resize.setPictureSize').on('resize.setPictureSize', _.debounce(function() {
+          resizePictureSize($picture);
+        }, 200));
+        resizePictureSize($picture);
+      }
+
+      function attachAnimation() {
+        var $animate = $('.js-animate:not(.js-animate-attached)', context);
+        $animate.each(function() {
+          var $self = $(this);
+          if (!site.client.isMobileBreakpoint()) {
+            if ($self.hasClass('js-content-block')) {
+              var $picture = $('.js-content-block-picture', $self);
+              setPictureSize($picture);
+            }
+            // If out of viewport, scroll in
+            if ($self.offset().top > $(window).scrollTop()) {
+              $self.addClass('scroll-animation js-animate-attached');
+            }
+            var waypoint = new Waypoint({
+              element: $self,
+              handler: function(direction) {
+                $self.toggleClass('transition', (direction === 'down'));
+                $self.trigger('animation.triggered', (direction === 'down'));
+              },
+              offset: '93%'//'100%'
+            });
+          }
+        });
+      }
+
+      attachAnimation();
+
+      // Wait for images to load then load rellax
+      $('img').on('load.done', _.debounce(function(event) {
+        var $rellax = $('.js-rellax');
+        if ($rellax.length && !site.client.isMobileBreakpoint()) {
+          // Remove rellax positioning
+          $rellax.attr('style', '');
+          var rellax = new Rellax('.js-rellax', {
+            center: true,
+          });
+          attachAnimation();
+          // on refresh, destroy and refresh
+          $(document).on('rellax.refresh', function(event) {
+            $rellax.attr('style', '');
+            rellax.destroy();
+            rellax = new Rellax('.js-rellax', {
+              center: true,
+            });
+          });
+        }
+      }, 3000));
+
+      $(document).on('animations.waypointsRefresh', function(event) {
+        Waypoint.refreshAll();
+      });
+    }
+  };
+})(jQuery);

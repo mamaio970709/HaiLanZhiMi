@@ -1,0 +1,75 @@
+(function($) {
+  Drupal.behaviors.productGrid = {
+    attach: function(context, settings) {
+      var $grids = $('.js-product-grid', context);
+      var $carouselGrids = $grids.filter('.product-grid--carousel');
+      var $carousels = $('.js-product-carousel', $carouselGrids);
+      var hasQuickshop = $grids.hasClass('product-grid--quickshop');
+      var $wrapper = $('.product-grid-wrapper', context);
+      var $products = $('.js-product-grid-item', context);
+
+      $products.each(function() {
+        var $product = $(this).hasClass('product-brief--sku-product') ? $(this) : $(this).find('.product-brief--sku-product');
+
+        if ($product) {
+          var skuBaseId = $product.attr('data-sku-base-id') ? $product.attr('data-sku-base-id') : $product.data('sku-base-id');
+          $product.trigger('product.updateRoute', [skuBaseId]);
+        }
+        var $isMppToutHeader = $('.js-mpp-tout-header', $(this));
+        if ($isMppToutHeader.length) {
+          $(this).addClass('product-grid__item--tout-header');
+        }
+      });
+
+      // Loop through and init the carousels.
+      // Carousels might contain variations, so dynamically change the settings before constructing slick
+      // @setup - new brand to adjust responsive/dots settings per designs
+      $carousels.each(function() {
+        var arrowsDiv = $(this).parent().find('.carousel-controls');
+        var dotsDiv = $(this).parent().find('.carousel-dots');
+        var slidesShowCountSmall = $(this).data('slides-show-small');
+        var slidesShowCountMedium = $(this).data('slides-show-medium');
+
+        var settings = {
+          appendArrows: arrowsDiv,
+          arrows: true,
+          appendDots: dotsDiv,
+          dots: true,
+          infinite: true,
+          slidesToShow: slidesShowCountMedium,
+          slidesToScroll: slidesShowCountMedium,
+          responsive: [
+            {
+              breakpoint: 768,
+              settings: {
+                slidesToShow: slidesShowCountSmall,
+                slidesToScroll: slidesShowCountSmall
+              }
+            }
+          ]
+        };
+
+        // Init this carousel with our settings
+        $(this).slick(settings);
+
+        // On before slide change
+        $(this).on('beforeChange', function(event, slick, currentSlide, nextSlide){
+          // Remove quickshop:
+          if (hasQuickshop && Drupal.behaviors.quickshop) {
+            $('.js-quickshop', $wrapper).remove();
+          }
+        });
+      });
+
+      var collectGridProductIds = function($gridItems) {
+        var gridItems = $.makeArray($gridItems);
+        var allProductIds = $.map(gridItems, function(cell) {
+          return $(cell).data('product-id');
+        });
+        return allProductIds;
+      };
+
+    }
+  };
+
+})(jQuery);

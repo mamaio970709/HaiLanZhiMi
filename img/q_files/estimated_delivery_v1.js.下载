@@ -1,0 +1,155 @@
+(function($) {
+  "use strict";
+
+  Drupal.behaviors.estimatedDeliveryV1 = {
+
+    // properties
+    rpcBaseOptions: {
+      method:  'address.estimateDeliveryDateSPP'
+    },
+    getRpcOptions : function (postalCode, otherOptions) {
+      return $.extend({ params: [{"POSTAL_CODE": postalCode }] }, this.rpcBaseOptions, otherOptions);
+    },
+    nodes: {},
+    data: null,
+    validData: null,
+    metadata: null,
+    isData: function (data) {
+      return data.type != null; // an object is considered (result) data when it has its type attribute set
+    },
+    isValidData: function (data) {
+      return this.invalidTypes.indexOf(data.type) === -1;
+    },
+    invalidTypes: ['us_std', 'us_territory', 'us_mil_pobox'],
+    displayOrder: ["us_nextday", "us_2day", "us_std", "us_std_exact", "us_territory", "us_mil_pobox"],
+    resources: {
+    },
+
+    // methods
+    attach: function(context) {
+      $.extend(this.nodes, {
+        context: context,
+        openElement: $(".js-estimated-delivery-open", context)
+      });
+      this.nodes.openElement.on("click", _.bind(this.init, this));
+    },
+    init: function () {
+      var rendered = site.template.get({
+        name: 'estimated_delivery'
+      });
+
+      generic.overlay.launch({
+        content: rendered,
+        width: 455,
+        height: 304,
+        cssClass: 'product__estimated-delivery-overlay-cbox',
+        onComplete: _.bind(function () {
+          $.extend(this.nodes, {
+            container: $(".js-estimated-delivery-container", this.nodes.context),
+            search: $(".js-estimated-delivery-search", this.nodes.context),
+            submit: $(".js-estimated-delivery-submit", this.nodes.context),
+            disclaimer: $(".js-estimated-delivery-disclaimer", this.nodes.context),
+            disclaimerToggle: $(".js-estimated-delivery-disclaimer-toggle", this.nodes.context),
+            dataContainer: $(".js-estimated-delivery-data", this.nodes.context),
+            dataError: $(".js-estimated-delivery-data-error", this.nodes.context),
+            dataTable: $(".js-estimated-delivery-data-table", this.nodes.context),
+            dataTableBody: $(".js-estimated-delivery-data-table-body", this.nodes.context),
+            resultRow: $(".js-estimated-delivery-result-row", this.nodes.context),
+            resultDate: $(".js-estimated-delivery-result-date-cell", this.nodes.context),
+            resultMethod: $(".js-estimated-delivery-result-method-cell", this.nodes.context)
+          });
+
+          this.nodes.disclaimerToggle.on('click', _.bind(function(el) {
+            this.nodes.disclaimer.toggle();
+            $.colorbox.resize();
+          }, this));
+          this.nodes.submit.on('click', _.bind(this.submit, this));
+          this.nodes.search.on('keyup', _.bind(function (e) {
+            if (e.which == 13) {
+              e.preventDefault();
+              this.submit();
+            }
+          }, this));
+        }, this) // bind the onComplete function to the same 'this' context as the functions/properties init, attach, getRpcOptions, et. al.
+      });
+    },
+    submit: function () {
+      var postalCode = this.nodes.search.val();
+
+      generic.jsonrpc.fetch(this.getRpcOptions(postalCode, {
+        onSuccess: _.bind(function (jsonRpcResponse) {
+          this.data = _.filter(jsonRpcResponse.getValue(), this.isData);
+          this.metadata = _.reject(jsonRpcResponse.getValue(), this.isData);
+          this.validData = _.filter(this.data, this.isValidData, this);
+          this.display(this.validData);
+          $.colorbox.resize();
+        }, this),
+        onFailure: _.bind(function (jsonRpcResponse) {
+          var errorObjectsArray = jsonRpcResponse.getMessages();
+          this.nodes.dataTable.hide();
+          this.nodes.dataError.show();
+          generic.showErrors(errorObjectsArray, null, null);
+        }, this)
+      }));
+    },
+    display: function (data) {
+      var isValidPostalCode = this.metadata[1]["is_valid_zipcode"],
+        invalidErrorMessage = this.nodes.container.data("invalid-error-message"),
+        templateRow,
+        orderedRows = [];
+
+      if (!data) {
+        data = this.data;
+      }
+
+      if (!isValidPostalCode) {
+        this.nodes.dataError.html(invalidErrorMessage);
+        this.nodes.dataTable.hide();
+        this.nodes.dataError.show();
+        return;
+      }
+
+      // remove all previous template rows (esp. if any non-empty ones are present), and save it to use as a template
+      // row for all forthcoming results
+      templateRow = this.nodes.resultRow.remove().first();
+      this.nodes.dataTableBody.empty();
+
+      $.each(data, _.bind(function (i, value) {
+        var deliveryDate = value['min_day_name'] + ' ' + value['min_mon'] + '.' + value['min_day_num'],
+          shipment_option_text = value['shipment_option_text'],
+          // we need to parse 'Standard (3-9 Bus days)' down to 'Standard' for output (US specific)
+          match = shipment_option_text.match(/Standard/),
+          row = templateRow.clone();
+
+        if (match) {
+          shipment_option_text = match[0];
+        }
+
+        if (value['max_day_num']) {
+          deliveryDate += ' - ' + value['max_day_name'] + ' ' + value['max_mon'] + '.' + value['max_day_num'];
+        }
+
+        row.find('.js-estimated-delivery-result-method-cell').html(shipment_option_text);
+        row.find('.js-estimated-delivery-result-date-cell').html(deliveryDate);
+
+        // simple sorting approach
+        if (value["type"] && this.displayOrder.indexOf(value["type"]) !== -1) {
+          row.data("shipmethod-type", value["type"]);
+          orderedRows[this.displayOrder.indexOf(value["type"])] = row;
+        } else {
+          // a bit of fancy footwork below, to make sure we're putting rows whose type doesn't have them in the
+          // display order always at the end of our orderedRows array
+          orderedRows[this.displayOrder.length > orderedRows.length ? this.displayOrder.length : orderedRows.length] = row;
+        }
+      }, this));
+
+      this.nodes.dataTableBody.append(_.compact(orderedRows));
+
+      // explicitly hiding and showing sections irrelevant and relevent to the results just culled (respectively)
+      this.nodes.dataError.hide();
+      this.nodes.dataTable.show();
+    }
+
+  };
+
+})(jQuery);

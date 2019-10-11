@@ -1,0 +1,34 @@
+(function($) {
+
+'use strict';
+
+Drupal.behaviors.selectBox = {
+  attach: function(context) {
+
+    // @TODO: MOVEME
+    // Add a class to required fields that user has interacted with so we can add add styling to
+    $('input:required').one('blur keydown', function() {
+      $(this).addClass('is-filled-in');
+    });
+
+    $('.selectBox:not(.selectBox-attached)', context).each(function() {
+      $(this).addClass('selectBox-attached').selectBox({
+        mobile: $(this).hasClass('selectBox--yes-even-for-mobile')
+      });
+    });
+  },
+
+  // Use this instead of direclty invoking $('.selectBox').selectBox('refresh').
+  // The plugin doesn't take into account the fact that the selectBox may be
+  // disabled for touch and will blow up if it is.
+  refresh: function($selects) {
+    $selects.each(function() {
+      var control = $(this).data('selectBox-control');
+      if (control && control.length) {
+        $(this).selectBox('refresh');
+      }
+    });
+  }
+};
+
+})(jQuery);

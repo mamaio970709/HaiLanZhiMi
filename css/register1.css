@@ -1,0 +1,148 @@
+/* header */
+body,p,ul,ol,dl,dd,h1,h2,h3,h4,h5,h6,hr,td,input,textarea{
+	margin:0;
+	padding:0;
+}
+/* html,body{
+    height: 100%;
+    overflow: hidden;
+} */
+ul,ol,li{
+	list-style: none;
+}
+a{
+	text-decoration:none;
+}
+img{
+	border:none;
+}
+/* header */
+.headerTop{
+    width: 100%;
+    height: 65px;
+}
+.photo{
+    float: left;
+    margin-top:8px;
+}
+.dingyue{
+    float: left;
+    margin-top: 20px;
+    margin-left: 14px;
+    font-size: 12px;
+    color: #333333;
+}
+.lamer{
+    margin-left: 370px;
+    margin-top:20px;
+    width: 161px;
+    height: 36px;
+}
+.topRight{
+    float:right;
+}
+.door{
+    display: inline-block;
+    width: 66x;
+    margin-top:16px;
+    font-size: 12px;
+    color: #333333;
+    background: url(../img/m2.jpg)  no-repeat right center;
+    padding-right: 16px;
+
+}
+a:nth-child(3){
+    background-image: none;
+}
+.topRight img{
+    display: block;
+    margin-top:14px;
+    margin-right: 14px;
+    float: right;
+    width: 16px;
+    height: 19px;
+}
+header{
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 9;
+    background: white;
+}
+.headerButtom{
+    width: 100%;
+    height: 70px;
+    text-align: center;
+    line-height: 70px;
+    position: relative;
+
+    
+
+    /* border-bottom: 1px solid #c2c2c2; */
+}
+.headerButtom a{
+    margin-right: 40px;
+    font-size: 15px;
+    color: #333333;
+    display: block;
+    position: relative;
+    float: left;
+    left:184px;
+}
+.headerButtom a:nth-child(9){
+    margin-right:8px;
+}
+.headerButtom img{
+    vertical-align: middle;
+    width: 20px;
+    height: 20px;   
+}
+a:hover{
+    color: green;
+} 
+
+.face_box{
+    width: 1200px;
+    height:220px;
+    background-color: white; 
+    position: absolute;
+    right: -734px;
+    top: 66px;
+    display: flex;
+    display: none;
+    border:1px solid #eee;
+    
+}
+.face_one{
+    width:200px;
+    height: 220px;
+    /* float: left; */
+    flex: 1;
+    border-right: 1px solid #eee;
+
+}
+.face_one img{
+    width:200px;
+    height: 180px;
+}
+.face_one p{
+    margin-top:-35px;
+    color: #999;
+}
+.headerButtom a:hover .face_box{
+    display: block;
+    display: flex;
+} 
+.face_one p:hover{
+    color:black;
+}
+.headerButtom a:hover{
+    border-bottom: 1px solid black;
+}
+header{
+    border-bottom: 1px solid #999;
+}
+
+.headerButtom a:nth-child(4) .face_box{
+    right:-630px;
+}

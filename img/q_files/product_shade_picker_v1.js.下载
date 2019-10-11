@@ -1,0 +1,47 @@
+var prodcat = prodcat || {};
+prodcat.data = prodcat.data || {};
+
+(function($) {
+  Drupal.behaviors.productShadePickerV1 = {
+    attach: function(context, settings) {
+      var $products = $('.js-product', context);
+      $products.each(function(index, product) {
+        var $product = $(this);
+        var $shadePicker = $('.js-product-shade-picker', $product);
+        if ($shadePicker.length) {
+          var $shade = $('.js-product-shade', $shadePicker);
+          $shade.once().click(function(event) {
+            event.preventDefault();
+            var skuBaseId = $(this).data('sku-base-id');
+            $product.trigger('product.skuSelect', skuBaseId);
+          });
+        }
+      });
+    }
+  };
+
+  $(document).on('product.quickshop.launch.overlay product.quickshop.launch.inline', function(event, newContext) {
+    Drupal.behaviors.productShadePickerV1.attach(newContext, Drupal.settings);
+  });
+
+  $(document).on('product.skuSelect product.shadePicker', '.js-product', function(event, skuBaseId) {
+    if (!$('.js-product-shade-picker', this).length) {
+      return;
+    }
+    // console.log('product.shadePicker');
+    // console.log(skuBaseId);
+    if ($('.js-product-shade', this).length) {
+      $('.js-product-shade', this).removeClass('active');
+      $('.js-product-shade[data-sku-base-id="' + skuBaseId + '"]', this).addClass('active');
+    }
+    $('select.js-sku-menu', this).val(skuBaseId);
+    var sku = prodcat.data.getSku(skuBaseId);
+    if (sku && sku.SHADENAME) {
+      if (sku.SHADE_DESCRIPTION) {
+        $('.js-shadename', this).html(sku.SHADE_DESCRIPTION);
+      } else {
+        $('.js-shadename', this).html(sku.SHADENAME);
+      }
+    }
+  });
+})(jQuery);

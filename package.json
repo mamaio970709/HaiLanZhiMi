@@ -1,0 +1,23 @@
+{
+  "name": "hailanzhimi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "gulp": "^4.0.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mamaio970709/HaiLanZhiMi.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mamaio970709/HaiLanZhiMi/issues"
+  },
+  "homepage": "https://github.com/mamaio970709/HaiLanZhiMi#readme"
+}

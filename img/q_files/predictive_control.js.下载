@@ -1,0 +1,210 @@
+/*
+  Endeca control class for the typeahead endeca instance.
+*/
+var site = site || {};
+site.endeca = site.endeca || {};
+site.endeca.instances = site.endeca.instances || {};
+site.endeca.instances.typeahead = site.endeca.instances.typeahead || {};
+
+(function($) {
+
+site.endeca.instances.typeahead.control = site.endeca.generic.Class.create(site.endeca.control, {
+    initialize: function (args) {
+        this.timer = 0;
+        this._super(args);
+
+        if (this.nodes.wrapper.length && this.nodes.inputElements.length) {
+            var that = this;
+            this.nodes.inputElements.bind('keyup', that, that.onKeyUp);
+            this._watchToClose();
+        }
+
+        $(document).trigger('endeca.typeahead.init');
+    },
+
+    onKeyUp: function (event) {
+        var $this = jQuery(this);
+        var isHeader = $this.hasClass('search-term--header');
+        var that = event.data;
+        clearTimeout(that.timer);
+        that.timer = setTimeout(function () {
+            that.currentInputElement = $this;
+            var searchTerm = jQuery.trim( $this.val() )/* + "*"*/;
+
+            if (searchTerm != that.searchTerm && searchTerm.length >= that.configuration.minSearchLength) {
+                that.searchTerm = searchTerm;
+                that.search({
+                    searchTerm: searchTerm
+                });
+            } else {
+              if (searchTerm.length <= 0) {
+                // probably a better way to reset the form, but for now...
+                that.nodes.inputElements.click();
+              }
+            }
+
+            $(document).trigger('endeca.typeahead.keyup', [searchTerm, isHeader]);
+        }, 50);
+    },
+
+    _watchToClose: function () {
+        var that = this;
+        jQuery(document).bind('click', that, function (event) {
+            var tgt = event.target;
+            var that = event.data;
+
+            if (!jQuery(tgt).parents(that.nodes.wrapper.selector).length &&
+                tgt != that.currentInputElement &&
+                tgt != that.nodes.wrapper[0]) {
+                that.nodes.wrapper.addClass('hidden');
+                that.nodes.recommendation.show();
+                return;
+            }
+
+            $(document).trigger('endeca.typeahead.close');
+        });
+    },
+
+    searchCompleted: function () {
+        if (!this._super()) {
+            return;
+        }
+        this.hasResults = false;
+
+        if (this.queries.product.jsonResult.AggrRecords && this.queries.product.jsonResult.AggrRecords.length) {
+            var termResultDataRef = {};
+            var termResultData = [];
+
+            for ( var i = 0; i < this.queries.product.jsonResult.AggrRecords.length; i++ ) {
+                if ( this.queries.product.jsonResult.AggrRecords[i].Properties["DGraph.WhyDidItMatch"] ) {
+                    var matches;
+
+                    if ( typeof this.queries.product.jsonResult.AggrRecords[i].Properties["DGraph.WhyDidItMatch"] == "string" ) {
+                        matches = [ this.queries.product.jsonResult.AggrRecords[i].Properties["DGraph.WhyDidItMatch"] ]
+                    } else {
+                        matches = this.queries.product.jsonResult.AggrRecords[i].Properties["DGraph.WhyDidItMatch"]
+                    }
+
+                    for ( var j = 0; j < matches.length; j++ ) {
+                        if ( matches[j] && matches[j].match(/Category: (.*)/)) {
+                            var filteredMatch = RegExp.$1.replace(/ (.*)/, '');
+                            if ( ! filteredMatch.match(/^CAT/) ) {
+                                if ( termResultDataRef[ filteredMatch ] ) {
+                                    termResultDataRef[ filteredMatch ]++;
+                                } else {
+                                    termResultDataRef[ filteredMatch ] = 1;
+                                    termResultData.push({
+                                        'term': filteredMatch,
+                                        'url': this.configuration.fullSearchBaseUrl + encodeURIComponent(filteredMatch)
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // ensuring term suggestion starts with what is already entered into search bar so auto-complete will look correct
+            if (termResultData[0]) {
+              var term = this.searchTerm.replace('*', '');
+              var regexTermStart = new RegExp('^' + term, 'i');
+              var suggestion = termResultData[0].term;
+              if (! suggestion.match(regexTermStart)) {
+               termResultData[0].term = "";
+               termResultData[0].url = "";
+              }
+            }
+
+            if ( this.results.terms.configuration.limit && termResultData.length > this.results.terms.configuration.limit ) {
+                termResultData.splice( this.results.terms.configuration.limit );
+            }
+
+            termResultData.sort( function( a, b ) {
+                if ( termResultDataRef[a] > termResultDataRef[b] ) { return -1; }
+                   else if ( termResultDataRef[a] < termResultDataRef[b] ) { return 1; }
+                return 0;
+            });
+
+
+            this.results.terms.resultData = termResultData;
+            this.results.terms.displayResults();
+            this.results.terms.displayResultNodes();
+            this.results.terms.show();
+
+            this.hasResults = true;
+        } else {
+            this.results.terms.hide();
+        }
+
+        this.results.products.resultData = this.catalogs.product.resultList;
+
+        if (this.results.products.resultData.length) {
+            // this is to trim the list of images, in cases where a product has more than one, to just one image
+            // (to deal with the front-end's brittle handling of lists, not being able to do PROP.0 to get the
+            // first property)
+            for (var i = 0; i < this.results.products.resultData.length; i += 1) {
+                for (var prop in this.results.products.resultData[i]) {
+                    if (prop.indexOf("IMAGE_") === 0 && typeof this.results.products.resultData[i][prop] !== "string") {
+                        this.results.products.resultData[i][prop] = this.results.products.resultData[i][prop][0];
+                    }
+                }
+            }
+
+            this.results.products.displayResults();
+            this.results.products.show();
+            this.hasResults = true;
+        } else {
+            this.results.products.hide();
+        }
+
+        if ( this.hasResults ) {
+            /* Add first search result */
+            var searchTerm = this.searchTerm.replace('*', '');
+            var ofText = rb.endeca["of"];
+            var summary = rb.endeca["typeahead_product_summary"];
+            var seeAll = rb.endeca["typeahead_see_all"];
+            this.results.seeResults.resultData = [{
+                'term': '<span class="search-count">' + summary + ' ' + this.results.products.resultNodes.length  + ' ' +  ofText + ' '
+                        + this.meta.searchInfo.totalRecords + '</span>'
+                        + '<span class="search-results">' + seeAll + '</span>',
+                'url': this.configuration.fullSearchBaseUrl + searchTerm
+            }];
+
+            this.nodes.recommendation.hide();
+            this.results.seeResults.displayResults();
+            this.results.seeResults.displayResultNodes();
+            this.results.seeResults.show();
+        } else {
+          this.results.noResults.resultData = [{
+              'no_result': rb.endeca["typeahead_no_results"]
+          }];
+          this.results.noResults.displayResults();
+          this.results.noResults.displayResultNodes();
+          this.results.noResults.show();
+          this.results.seeResults.hide();
+          this.nodes.recommendation.show();
+        }
+
+        this.nodes.wrapper.removeClass('hidden');
+        var me = this.nodes;
+        this.nodes.wrapper.find('.result').bind('click', function (e) {
+            var thisLink = this.getElementsByClassName('link');
+            thisLink[0].click();
+            //e.preventDefault();
+            if (this.parentElement.parentNode.className = "js-end-typeahead-term-results") {
+                //    site.endeca.coremetrics.termClick();
+            } else {
+                site.endeca.coremetrics.productClick();
+            }
+            return true;
+        });
+
+        this.hideLoading();
+
+        $(document).trigger('endeca.typeahead.complete', [ this.hasResults ]);
+        
+        this.displayResults();
+    }
+});
+
+})(jQuery);

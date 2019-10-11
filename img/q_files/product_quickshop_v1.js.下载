@@ -1,0 +1,351 @@
+var prodcat = prodcat || {};
+prodcat.ui = prodcat.ui || {};
+prodcat.data = prodcat.data || {};
+
+var site = site || {};
+site.template = site.template || {};
+
+(function($) {
+  var lastBP;
+
+  Drupal.behaviors.quickshopOverlay = {
+
+    /*
+     * jQuery object that stores all the grids after they are set up in initializeGrid
+     */
+    $grids: $(),
+
+    /*
+     * Sets up the product grid for inline quickshop by inserting many js-quickshop-container div elements
+     * based upon the data-grid-items-per-row attribute in the product grid (and screen size).
+     * Each .js-quickshop-container div also gets specific productID classes so the proper product info
+     * goes to the proper container on launch.
+     * @param $grids - jQuery object of product grids on the page.
+     * @param size - string such as "small" or "medium" for determining the number of products in a row.
+     */
+    initializeGrid: function($grids, size) {
+      var self = this;
+      if (typeof size === 'undefined') {
+        size = Unison.fetch.now().name;
+      }
+      //var isMobile = false;
+
+      // Prep each grid (normally just one grid) by adding quickshop container div elements.
+      $grids.has('.js-product-grid-item').each(function() {
+        // Cache $(this) grid and remove any preexisting quickshop containers.
+        var $thisGrid = $(this);
+        self.reset($thisGrid);
+
+        var i = 0;
+        var classes = '';
+        var rows = [];
+        var $row = $();
+        var $containerDiv = $('<div class="js-quickshop-container product-quickshop-wrapper" />');
+        var $items = $('.js-product-grid-item:visible', $thisGrid);
+        var totalItems = $items.length;
+        var isCarousel = $(this).hasClass('product-grid--carousel');
+
+        // Loop through each item in the product grid.
+        $items.each(function(index) {
+          var $thisItem = $(this);
+          var productID = $thisItem.data('product-id');
+
+          // For carousels, remove the qs link then we just need all the classes
+          if (isCarousel) {
+            // $('.product-brief__quickshop-launch', $thisGrid).hide();
+            return;
+          }
+
+          // If there is a product ID available, keep track of it to use in the current quickshop container.
+          if (productID) {
+            classes += ' js-quickshop-container--' + productID;
+          }
+
+          // Products share a quickshop container according to the number per row in the grid.
+          var span = 1;
+          var itemsPerRow = $thisGrid.data('grid-items-per-row')[size.toString()] || $thisGrid.data('grid-items-per-row').medium;
+          if ($(this).data('colspan')) {
+            // If mobile, colspan should always be 100% regardless of data-colspan value (make equal to # of items per row)
+            span = (Unison.fetch.now().name === 'small') ? itemsPerRow : $(this).data('colspan');
+          }
+          i += span;
+          $row = $row.add($thisItem);
+
+          // The count has either reached the end of the row, or the end of the entire grid. Append the quickshop container!
+          if ((i === itemsPerRow) || (index + 1 === totalItems)) {
+            $thisItem.after($containerDiv.clone()).next().addClass(classes);
+            rows.push($row);
+            i = 0;        // Reset the count.
+            $row = $();   // Empty the jQuery object holding the current row of items.
+            classes = ''; // Clear the class name list.
+          }
+        });
+
+        if (isCarousel) {
+          // slick wraps our $items in its own stuff so we have to treat those
+          // as items if they've been set.
+          var $slides = $('.slick-slide', this);
+          rows = $slides.length ? [$slides] : [$items];
+          $(this).after($containerDiv.clone()).next().addClass(classes);
+        }
+
+        // Storage of completed grid and its rows.
+        $thisGrid.data('product-grid-rows', rows);
+        self.$grids.add($thisGrid);
+      });
+    },
+
+    /* Clear the product grid of all quickshop containers.
+     * @params $grid - jQuery object of product grid to reset
+     */
+    reset: function($grid) {
+      // Remove all quickshop div container elements.
+      $('.js-quickshop-container', $grid).remove();
+
+      // Remove active class from all product briefs.
+      $('.js-product-brief', $grid).removeClass('active');
+    },
+
+    /*
+     * Standard Drupal method
+     */
+    attach: function(context) {
+      // Get screen size.
+      var size = Unison.fetch.now().name;
+      this.initializeGrid($('.js-product-grid', context), size);
+
+      $(document).trigger('product.quickshopInit', [ {
+        "type": {
+          "overlay": true,
+          "toString" : function() {
+            return "overlay";
+          }
+        },
+        "init": this.initializeGrid,
+        "reset": this.reset,
+        "$grids": this.$grids
+      }]);
+
+      function quickshopHoverPanel() {
+        // Set height of product brief hover panel
+        var $productBrief = $('.js-product-brief', context);
+        $productBrief.each(function() {
+          var productBriefHeight = $(this).find('.js-product-brief__container').outerHeight(true);
+          var productExtrasHeight = $(this).find('.js-product-brief__extras-container').outerHeight(true);
+          $(this).find('.js-product-brief__extras').height(productBriefHeight + productExtrasHeight);
+        });
+      }
+
+      // https://github.com/aFarkas/lazysizes
+      $(document).on('lazybeforeunveil', function() {
+        setTimeout(function() {
+          quickshopHoverPanel();
+        }, 200);
+      });
+
+      $(window).on('resize', _.debounce(function() {
+        quickshopHoverPanel();
+      }, 200));
+    }
+  };
+
+  Unison.on('change', function(bp) {
+    lastBP = bp.name;
+    Drupal.behaviors.quickshopOverlay.initializeGrid($('.js-product-grid'), bp.name);
+  });
+
+  /*
+   * 4 custom events below:
+   * product.quickshop.launch.inline
+   * product.quickshop.launch.overlay
+   * product.quickshop.close.inline
+   * product.quickshop.close.overlay
+   */
+
+  // Uses the supplied .js-product to find the correct .js-quickshop-container to use.
+  // Then loads it with the appropriate product data for the product_quickshop.mustache template.
+  // Finally, shows the quickshop content inline.
+  $(document).on('product.quickshop.launch.inline', '.js-product', function(e) {
+    // Store relevant product values.
+    var $product = $(this);
+    var productID = $product.data('product-id');
+    var productData = prodcat.data.getProduct(productID);
+
+    // Store other elements for inserting product info into quickshop container.
+    var $grid = $product.closest('.js-product-grid')
+    var $gridItem = $product.closest('.js-product-grid-item');
+    var $allProducts = $('.js-product-brief', $grid);
+    var $containers = $('.js-quickshop-container', $grid);
+    var $container = $containers.filter('.js-quickshop-container--' + productID); // Get specific container to use for this product.
+    var $activeContainers = $containers.filter('.active');
+    var isCarousel = $grid.hasClass('product-grid--carousel');
+
+    // Initialize some other variables
+    var alreadyActive = $product.hasClass('active');
+    var template = 'product_quickshop';
+    var animationSpeed = 400;
+    var quickshopTop = 0;
+    var quickshopOffset = $('.js-site-header').height();
+
+    // Close the quickshop inline if it is already active (and thefore already open).
+    if (alreadyActive) {
+      $product.trigger('product.quickshop.close.inline');
+      return;
+    }
+
+    // @TODO Check to make sure this is even needed at this point:
+    // If the product has data-available-skus set, then only
+    // display the skus available in the attribute.
+    // See Origins for actual code...
+
+    // Render the quickshop template.
+    var rendered = site.template.get({
+      name: template,
+      data: productData
+    });
+
+    // Make some items disappear before the big reveal.
+    $activeContainers.hide();
+    $('.js-quickshop', $container).remove();
+    $container.append(rendered).slideDown(animationSpeed, function() {
+      $(this).css('overflow', 'visible');
+      var $imageContainer = $('.product-full__image', $(this));
+      if ($imageContainer.length) {
+        // Drupal.behaviors.productFullImageV1.attach($(this));
+        $(document).trigger('product.fullImage.init', [$(this)]);
+      }
+    });
+
+    $(document).trigger('productflag.init', $container);
+
+    // Set up an event trigger for the inline close button.
+    $(document).on('click', '.js-quickshop-close-inline', function(e) {
+      e.preventDefault();
+      $product.trigger('product.quickshop.close.inline');
+    });
+
+    $grid.trigger('product.quickshop.animation.before');
+
+    // Animate the window to bring the quickshop container into view.
+    if (isCarousel) {
+      quickshopTop = 0;
+    } else {
+      quickshopTop = $container.offset().top;
+    }
+
+    $('html, body').animate({
+      scrollTop: Unison.fetch.now().name === 'small' ? quickshopTop : quickshopTop - quickshopOffset - 3
+    }, {
+      duration: animationSpeed
+    });
+
+    $allProducts.removeClass('active');
+    $product.addClass('active');
+
+    $('.selectBox').selectBox();
+  });
+
+  // Uses the supplied .js-product to load the proper product data.
+  // Then fires up an overlay with the product_quickshop.mustache template.
+  $(document).on('product.quickshop.launch.overlay', '.js-product', function() {
+    // Store relevant product values
+    var productID = $(this).data('product-id');
+    var productData = prodcat.data.getProduct(productID);
+    var template = 'product_quickshop';
+
+    // Render the quickshop template
+    var rendered = site.template.get({
+      name: template,
+      data: productData
+    });
+
+    generic.overlay.launch({
+      'content': rendered,
+      height: 'auto',
+      width: 1000,
+      maxWidth: '100%',
+      cssClass: 'qs-overlay-cbox',
+      onComplete: function() {
+        var $cbox = $('#colorbox.qs-overlay-cbox');
+        var resizeFn = _.debounce(function() {
+          $.colorbox.resize();
+        }, 400);
+        // Resize initially to get rid of the full background
+        $.colorbox.resize();
+        // Resize delayed by 200 to account for cached images
+        resizeFn();
+        // Resize on resize and image load
+        $(window).on('resize.quickshop', resizeFn);
+        $cbox.find('img').on('load', resizeFn);
+
+        $('.selectBox').selectBox();
+        if ($('.product-full__image-carousel').length) {
+          $('.js-spp-carousel').slick('setPosition');
+        }
+        // Trigger event and pass current overlay
+        $(document).trigger('quickshop.loaded', $cbox);
+        $(document).on('addToCart.success', function() {
+          $.colorbox.close();
+        });
+        $(document).trigger('productflag.init', $cbox);
+      }
+    });
+  });
+
+  // Closes the inline quickshop template according to the .js-product supplied.
+  $(document).on('product.quickshop.close.inline', '.js-product', function() {
+    var $product = $(this);
+    var productID = $product.data('product-id');
+    var $grid = $product.closest('.js-product-grid');
+    var $container = $('.js-quickshop-container--' + productID, $grid);
+    var animationSpeed = 400;
+
+    $product.removeClass('active');
+
+    $container.slideUp(animationSpeed, function() {
+      $grid.trigger('product.quickshop.animation.after');
+    });
+  });
+
+  // In response to clicking the inline launch link, find the closest product
+  // and then trigger the appropriate event for the code above.
+  $(document).on('click', '.js-quickshop-launch-inline', function(e) {
+    e.preventDefault();
+    $(this).closest('.js-product').trigger('product.quickshop.launch.inline');
+
+    // Trigger 'product.init' to set product status
+    $('.js-quickshop.js-product').trigger('product.init');
+    //Preorder function call for Quickshop
+    if (Drupal.settings.common.enable_preorder) {
+      var $statusList = $('.js-inv-status-list', $(this).closest('.js-product'));
+      var skuBaseId = $statusList.data("sku-base-id");
+      var skuData = prodcat.data.getSku(skuBaseId);
+      Drupal.behaviors.inventoryStatusV1.isPreorder(skuData);
+    }
+    var signedIn = (site.userInfoCookie.getValue('signed_in') - 0 === 1);
+    // Update wishlist success message for logged in user
+    if (signedIn) {
+      var $wishListContainer = $('.js-add-to-favorites');
+      var wishlistMessage = $wishListContainer.attr('data-tooltip-loggedin');
+      $wishListContainer.attr('data-tooltip-success', wishlistMessage);
+    }
+  });
+
+  // Same as above, except for the overlay launch link.
+  $(document).on('click', '.js-quickshop-launch-overlay', function(e) {
+    e.preventDefault();
+    $(this).closest('.js-product').trigger('product.quickshop.launch.overlay');
+
+    // Trigger 'product.init' to set product status
+    $('.js-quickshop.js-product').trigger('product.init');
+
+    var signedIn = (site.userInfoCookie.getValue('signed_in') - 0 === 1);
+    // Update wishlist success message for logged in user
+    if (signedIn) {
+      var $wishListContainer = $('.js-add-to-favorites');
+      var wishlistMessage = $wishListContainer.attr('data-tooltip-loggedin');
+      $wishListContainer.attr('data-tooltip-success', wishlistMessage);
+    }
+  });
+
+})(jQuery);
