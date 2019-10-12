@@ -1,0 +1,375 @@
+body,p,ul,ol,dl,dd,h1,h2,h3,h4,h5,h6,hr,td,input,textarea{
+	margin:0;
+	padding:0;
+}
+ul,ol,li{
+	list-style: none;
+}
+a{
+	text-decoration:none;
+}
+body,html{
+    overflow-x: hidden;
+}
+img{
+	border:none;
+}
+/* header */
+header {
+    position: relative;
+}
+.headerTop{
+    width: 100%;
+    height: 65px;
+}
+.photo{
+    float: left;
+    margin-top:8px;
+}
+.dingyue{
+    float: left;
+    margin-top: 20px;
+    margin-left: 14px;
+    font-size: 12px;
+    color: #333333;
+}
+.lamer{
+    margin-left: 370px;
+    margin-top:20px;
+    width: 161px;
+    height: 36px;
+}
+.topRight{
+    float:right;
+}
+.door{
+    display: inline-block;
+    width: 66x;
+    margin-top:16px;
+    font-size: 12px;
+    color: #333333;
+    background: url(../img/m2.jpg)  no-repeat right center;
+    padding-right: 16px;
+
+}
+a:nth-child(3){
+    background-image: none;
+}
+.topRight img{
+    display: block;
+    margin-top:14px;
+    margin-right: 14px;
+    float: right;
+    width: 16px;
+    height: 19px;
+}
+.headerButtom {
+    width: 100%;
+    position: relative;
+}
+.headerButtom > div{
+    width: 800px;
+    height: 70px;
+    /* background: pink; */
+    text-align: center;
+    margin:0 auto;
+    display: flex;
+    justify-content: space-around;
+    line-height: 70px;
+}
+
+.headerButtom a{
+    margin-right: 40px;
+    font-size: 12px;    
+    float: left;
+    width:150px;
+    height:200px;
+    text-align: center;
+    color: #333333;
+    /* display: block; */
+    border-right: 1px solid #eeeeee;
+
+}
+
+.headerButtom img{
+    vertical-align: middle;
+    width: 20px;
+    height: 20px;
+    
+}
+a:hover{
+    color: green;
+} 
+.slide-nav-wrap img{
+    width:100%;
+    height:150px;
+    display: block;
+
+}
+.slide-nav-wrap p{
+    line-height: 10px;
+    margin-top:10px;
+}
+
+/* lunBo */
+.lunBo{
+    width:100%;
+    height: 66px;
+    background: #eeeeee;
+    border-top:1px solid #c2c2c2;
+
+}
+
+.lunbOne{
+    width: 1020px;
+    height: 66px;
+    /* background: pink; */
+    line-height: 60px;
+    margin:0 auto;
+   
+}
+.lunbOne img{
+    width:42px;
+    height: 42px;
+    float: left;
+}
+.lunbOne p{
+    float: left;
+    font-size: 16px;
+    color: #333333;
+}
+.lunbOne a{
+    border-bottom: 1px solid black;
+}
+
+
+/* banner */
+.bannerPhoto{
+    width: 100%;
+    height: 475px;
+    /* background: url(../img/pcn190823_01.jpg) no-repeat center top; */
+    background-size: 100%;
+}
+.boxImg{
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+.boxImg a{
+    position: absolute;
+    width: 100%;
+    height: 731px;
+    display: block;
+    z-index: -1;
+    /* opacity: 0; */
+}
+.boxImg a:first-child{
+    opacity: 1;
+}
+.boxImg img{
+    width: 100%;
+    /* height: 100%; */
+}
+#doudouBox{
+    position: relative;
+    top: 445px;
+    left: 0;
+    list-style: none;
+    z-index: 1;
+    width: 100%;
+    overflow: hidden;
+}
+#doudouBox li{
+    float: left;
+    margin: 5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: white;
+}
+#doudouBox #li1{
+    background: blue;
+    margin-left: 678px;
+}
+
+
+/* nav */
+.nav{
+    width: 100%;
+    height: 303px;
+    /* background: url(../img/pcn190911_04.jpg) center center; */
+    /* background-size: 100%; */
+
+}
+.water{
+    width: 100%;
+    height: 585px;
+}
+.buy{
+    width: 100%;
+    height: 317px;
+}
+.young{
+    width: 100%;
+    height: 320px;
+}
+.white{
+    width: 100%;
+    height: 458px;
+}
+.Zong{
+    width: 100%;
+    height: 360px;
+}
+.green{
+    width: 100%;
+    height: 360px;
+}
+.yellow{
+    width: 100%;
+    height: 380px;
+}
+.green_two{
+    width: 100%;
+    height: 519px;
+}
+.new{
+    width: 100%;
+    height: 450px;
+}
+.active{
+    width: 100%;
+    height: 409px;
+}
+.theBox{
+    width: 100%;
+    height: 360px;
+}
+.faceWashing{
+    width: 100%;
+    height: 500px;
+}
+.all_one{
+    width: 100%;
+    height: 498px;
+}
+.all_two{
+    width: 100%;
+    height: 414px;
+}
+.box16{
+    width: 100%;
+    height: 460px;
+}
+.box17{
+    width: 100%;
+    height: 515px;
+}
+.box18{
+    width: 100%;
+    height: 246px;
+}
+
+/* footer */
+
+.footer{
+    width:100%;
+    height:383px;
+    background:#001711;
+}
+.footerBox{
+    width:100%;
+    height: 280px;
+    /* background: red; */
+}
+.footLeft{
+    width: 279px;
+    height: 176px;
+    padding-top:46px;
+    margin-left:102px;
+    /* background: skyblue; */
+    line-height: 30px;
+    float: left;
+}
+h4{
+    color: #eddecd;
+}
+ul,li{
+    font-size: 12px;
+    color: #7d7d7d;
+}
+.footLeft img{
+    margin-top:20px;
+    width: 25px;
+    height: 25px;
+}
+.footLeft #btn01{
+    border: none;
+}
+.footButtom{
+    /* background: pink; */
+    width:100%;
+    height: 50px;
+}
+
+.footWord p{
+    color:#eddecd;
+    font-size: 12px;
+    text-indent: 150px;
+    line-height: 50px;
+    float: left;
+}
+.wordRight{
+    width: 400px;
+    /* background: yellow; */
+    float: right;
+    padding-right: 150px;
+}
+.wordRight a{
+    color:#eddecd;
+    font-size:12px;
+}
+
+.bottom-nav-item > .slide-nav-wrap {
+    position: absolute;
+    width: 100vw;
+    height:200px;
+    background-color: white;
+    display: flex;
+    position: absolute;
+    left: 0;
+    padding-left: 150px;
+    top: 70px;
+    display: none;
+    border-top:1px solid #eeeeee;
+}
+.bottom-nav-item a:nth-child(1){
+    border-left:1px solid #eeeeee;
+}
+.go-top {
+    width: 40px;
+    height: 40px;
+    position: fixed;
+    top:50%;
+    right: 60px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    display: none;
+}
+.go-top > div{
+    width: 7px;
+    height:7px;
+    margin: 16px;
+    border-top: 1px solid #ccc;
+    border-left: 1px solid #ccc;
+    transform-origin: center center;
+    transform: rotate(45deg);
+    
+}
+.headerButtom.fixed-header {
+    background-color: white;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 999;
+}

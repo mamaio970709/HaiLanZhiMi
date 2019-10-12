@@ -13,16 +13,21 @@ gulp.task("watchall",async ()=>{
 
 
     //监听sass文件
-    gulp.watch("*.scss",async ()=>{
-        gulp.src("*.scss")
+    gulp.watch("scss/*.scss",async ()=>{
+        gulp.src("scss/*.scss")
         .pipe(sass())
-        .pipe(gulp.dest("c:\\phpstudy\\www\\HaiLanZhiMi\\css"))
+        .pipe(gulp.dest("css"))
     })
 
     //监听js，进行复制
     gulp.watch("js/*.js",async()=>{
         gulp.src("js/*.js")
         .pipe(gulp.dest("c:\\phpstudy\\www\\HaiLanZhiMi\\js"))
+    })
+
+    gulp.watch("css/*.css",async()=>{
+        gulp.src("css/*.css")
+        .pipe(gulp.dest("c:\\phpstudy\\www\\HaiLanZhiMi\\css"))
     })
 })
 

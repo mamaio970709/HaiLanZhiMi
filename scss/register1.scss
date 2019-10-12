@@ -1,0 +1,52 @@
+@import "register";
+.box {
+  width: 890px;
+  height: 900px;
+  // background: pink;
+  // text-align: center;
+  margin:0 auto;
+ }
+
+h2 {
+  font-size: 22px; 
+  padding-top:50px;
+  margin-bottom: 20px;
+  margin-left:360px;
+
+}
+.box-top input{
+
+  width:390px;
+  height:47px;
+  margin-top:20px;
+
+
+}
+#net{
+  border-bottom:1px solid black;
+}
+#btn01{
+  width:15px;
+  height: 15px;
+}
+.box-top{
+  margin-top: 20px;
+  width:390px;
+  height: 545px;
+  // background: red;
+  margin:0 auto;
+  margin-left:260px;
+
+
+}
+
+
+#reg01{
+  text-align: center;
+  background:black;
+  color:white;
+
+}
+input :hover #reg01{
+  background:green;
+}
