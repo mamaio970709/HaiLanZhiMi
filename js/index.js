@@ -1,4 +1,4 @@
-(function() {
+ (function() {
     /**
      * index 顶部菜单栏滑动
      */
