@@ -235,7 +235,7 @@ header{
 }
 .con-img{
     width: 1070px;
-    height: 707px;
+    height: 700px;
     background: white;
     /* background: pink; */
     margin:0 auto;
@@ -452,4 +452,92 @@ header{
     border-right-style: none;
     border-left-style: none;
     background: #f5faf5;
+}
+
+
+/* young */
+.young{
+    width:100%;
+    /* height:788px; */
+    /* background: pink; */
+    margin:0 auto;
+}
+.active{
+    widows: 978px;
+    height: 100px;
+    /* background: blue; */
+    /* font-size: 50px; */
+    text-align: center;
+}
+.active h2{
+    font-size: 50px;
+    font-weight: normal;
+}
+.active p{
+    font-size: 15px;
+    margin-top:10px;
+}
+.young-img{
+    width: 1050px;
+    height: 344px;
+    margin:0 auto;
+    margin-top:35px;
+}
+
+
+/* footer */
+
+.footer{
+    width:100%;
+    /* height:383px; */
+    background:#001711;
+}
+.footerBox{
+    width:100%;
+    height: 280px;
+    /* background: red; */
+}
+.footLeft{
+    width: 279px;
+    height: 176px;
+    padding-top:46px;
+    margin-left:102px;
+    /* background: skyblue; */
+    line-height: 30px;
+    float: left;
+}
+h4{
+    color: #eddecd;
+}
+ul,li{
+    font-size: 12px;
+    color: #7d7d7d;
+}
+.footLeft img{
+    margin-top:20px;
+    width: 25px;
+    height: 25px;
+}
+.footButtom{
+    /* background: pink; */
+    width:100%;
+    height: 50px;
+}
+
+.footWord p{
+    color:#eddecd;
+    font-size: 12px;
+    text-indent: 150px;
+    line-height: 50px;
+    float: left;
+}
+.wordRight{
+    width: 400px;
+    /* background: yellow; */
+    float: right;
+    padding-right: 150px;
+}
+.wordRight a{
+    color:#eddecd;
+    font-size:12px;
 }
